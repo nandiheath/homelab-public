@@ -1,0 +1,28 @@
+---
+- name: Update apt cache
+  ansible.builtin.apt:
+    update_cache: yes
+    cache_valid_time: 3600
+  when: ansible_os_family == "Debian"
+
+- name: Install common packages for Longhorn and other requirements
+  ansible.builtin.package:
+    name: "{{ os_common_packages }}"
+    state: present
+
+- name: Enable and start required services
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    enabled: yes
+    state: started
+  with_items: "{{ os_services_to_enable }}"
+  when: os_services_to_enable | length > 0
+
+- name: Set system configurations
+  ansible.posix.sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    state: present
+    reload: yes
+  with_dict: "{{ os_sysctl_settings }}"
+  when: os_sysctl_settings | length > 0

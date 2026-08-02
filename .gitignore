@@ -1,0 +1,13 @@
+credentials
+.hermit
+.idea
+/config/config.ini
+/infrastructure/terraform.tfstate
+**/.terragrunt-cache
+**/.terraform.lock.hcl
+**/.terraform.tfstate.lock.info
+*.tfstate
+*.tfstate.backup
+manifests/*/*/charts
+config/.env
+ansible/collections/ansible_collections/

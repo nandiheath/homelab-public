@@ -1,0 +1,20 @@
+---
+# Common packages to install on all nodes
+os_common_packages:
+  - nfs-common        # Required for Longhorn NFS support
+  - open-iscsi        # Required for Longhorn iSCSI support
+  - curl
+  - apt-transport-https
+  - ca-certificates
+  - gnupg
+  - software-properties-common
+
+# Services to enable and start
+os_services_to_enable:
+  - iscsid
+
+# System configurations to set
+os_sysctl_settings: {}
+  # Example:
+  # net.ipv4.ip_forward: 1
+  # net.bridge.bridge-nf-call-iptables: 1

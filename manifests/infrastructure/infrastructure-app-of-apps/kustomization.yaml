@@ -1,0 +1,28 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: argocd
+resources:
+  - apps/argocd.yaml
+  - apps/cilium.yaml
+  - apps/external-secrets.yaml
+  - apps/1password-connect.yaml
+  - apps/istio-base.yaml
+  - apps/istio-cni.yaml
+  - apps/istio-ztunnel.yaml
+  - apps/istiod.yaml
+  - apps/istio-ingressgateway.yaml
+  - apps/cert-manager.yaml
+  - apps/longhorn.yaml
+  - apps/cnpg.yaml
+  - apps/grafana.yaml
+  - apps/cluster-namespaces.yaml
+  - apps/metallb.yaml
+  - apps/homelab-private.yaml
+patches:
+  - path: base-application.yaml
+    target:
+      kind: Application
+  - path: homelab-private-patch.yaml
+    target:
+      kind: Application
+      name: homelab-private

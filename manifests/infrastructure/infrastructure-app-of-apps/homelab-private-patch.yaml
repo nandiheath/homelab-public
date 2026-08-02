@@ -1,0 +1,10 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: homelab-private
+spec:
+  project: homelab-private
+  source:
+    repoURL: https://github.com/nandiheath/homelab-private.git
+    targetRevision: main
+    path: artifacts/application/application-app-of-apps

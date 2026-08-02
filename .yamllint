@@ -1,0 +1,16 @@
+extends: default
+ignore: |
+  ansible/collections/ansible_collections/**
+
+rules:
+  braces:
+    max-spaces-inside: 1
+  comments:
+    min-spaces-from-content: 1
+  comments-indentation: disable
+  line-length: disable
+  new-line-at-end-of-file: disable
+  octal-values:
+    forbid-implicit-octal: true
+    forbid-explicit-octal: true
+  truthy: disable
