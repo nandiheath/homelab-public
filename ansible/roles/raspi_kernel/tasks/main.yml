@@ -1,0 +1,50 @@
+---
+- name: Validate pinned kernel maintenance inputs
+  ansible.builtin.assert:
+    that:
+      - ansible_distribution == 'Ubuntu'
+      - ansible_architecture in ['aarch64', 'arm64']
+      - raspi_kernel_mode in ['cluster_present', 'cluster_absent']
+      - raspi_kernel_packages | length == 2
+      - raspi_kernel_packages | select('match', '^(linux-image-raspi|linux-raspi)=5\.15\.0\.1105\.103$') | list | length == 2
+      - raspi_kernel_release == '5.15.0-1105-raspi'
+    fail_msg: Pinned Raspberry Pi kernel maintenance input is unsafe.
+
+- name: Require K3s absence for cluster-absent maintenance
+  ansible.builtin.command:
+    argv: [systemctl, is-active, k3s]
+  register: raspi_kernel_k3s_service
+  changed_when: false
+  failed_when: false
+  when: raspi_kernel_mode == 'cluster_absent'
+
+- name: Refuse cluster-absent mode with K3s present
+  ansible.builtin.assert:
+    that: raspi_kernel_k3s_service.rc != 0
+    fail_msg: Cluster-absent kernel maintenance requires K3s to be absent.
+  when: raspi_kernel_mode == 'cluster_absent'
+
+- name: Check package manager integrity
+  ansible.builtin.command:
+    argv: ["{{ item }}"]
+  loop: ["dpkg --audit", "apt-get check"]
+  changed_when: false
+
+- name: Inspect boot firmware capacity
+  ansible.builtin.command:
+    argv: [df, -Pk, "{{ raspi_kernel_boot_path }}"]
+  register: raspi_kernel_boot_capacity
+  changed_when: false
+
+- name: Require boot firmware free capacity
+  ansible.builtin.assert:
+    that: (raspi_kernel_boot_capacity.stdout_lines[-1].split()[3] | int) >= 18432
+    fail_msg: Boot firmware partition lacks the required 18 MiB free capacity.
+
+- name: Install only exact pinned kernel packages
+  ansible.builtin.apt:
+    name: "{{ raspi_kernel_packages }}"
+    state: present
+    update_cache: false
+    allow_downgrade: false
+    autoremove: false

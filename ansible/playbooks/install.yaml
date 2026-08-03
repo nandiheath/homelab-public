@@ -1,18 +1,40 @@
 ---
-- name: Setup OS for K3S nodes
-  hosts: server:agent
-  become: true
+- name: Authorize clean K3s installation
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  become: false
   roles:
-    - role: os_setup
+    - role: operation_guard
+      vars:
+        operation_guard_operation: k3s_install
+        operation_guard_source_version: "{{ k3s_install_version }}"
+        operation_guard_target_version: "{{ k3s_install_version }}"
 
-- name: Setup K3S server
+- name: Install clean embedded-etcd servers one at a time
   hosts: server
+  gather_facts: false
   become: true
+  serial: 1
+  any_errors_fatal: true
   roles:
     - role: k3s_server
 
-- name: Setup K3S agent
+- name: Install agents only after servers are healthy
   hosts: agent
+  gather_facts: false
   become: true
+  serial: 1
+  any_errors_fatal: true
   roles:
     - role: k3s_agent
+
+- name: Export kubeconfig after full server membership
+  hosts: server[0]
+  gather_facts: false
+  become: true
+  tasks:
+    - name: Export controller kubeconfig
+      ansible.builtin.include_role:
+        name: k3s_server
+        tasks_from: export_kubeconfig.yml

@@ -1,19 +1,20 @@
 ---
-- name: Reboot cluster servers staggered
-  hosts: server
+- name: Reboot one verified Raspberry Pi kernel node
+  hosts: k3s_cluster
+  gather_facts: false
   become: true
-  gather_facts: true
   serial: 1
+  any_errors_fatal: true
   tasks:
-    - name: Reboot
+    - name: Reboot node after pinned kernel installation
       ansible.builtin.reboot:
-        test_command: kubectl get nodes
-
-- name: Reboot cluster agents staggered
-  hosts: agent
-  become: true
-  gather_facts: true
-  serial: 1
-  tasks:
-    - name: Reboot
-      ansible.builtin.reboot:
+        reboot_timeout: 600
+    - name: Require exact active kernel release
+      ansible.builtin.command:
+        argv: [uname, -r]
+      register: raspi_kernel_active_release
+      changed_when: false
+    - name: Assert active pinned kernel release
+      ansible.builtin.assert:
+        that: raspi_kernel_active_release.stdout == raspi_kernel_release
+        fail_msg: Rebooted node did not activate the pinned Raspberry Pi kernel.

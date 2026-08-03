@@ -87,7 +87,7 @@
   ansible.builtin.assert:
     that:
       - hostvars['localhost'].operation_guard_host_key_checking | bool
-    fail_msg: Refusing lifecycle operation: Ansible host-key checking is disabled.
+    fail_msg: "Refusing lifecycle operation: Ansible host-key checking is disabled."
   delegate_to: localhost
   become: false
   run_once: true
@@ -152,7 +152,7 @@
   ansible.builtin.assert:
     that:
       - ansible_version.full is version(operation_guard_minimum_ansible_version, '>=')
-    fail_msg: Refusing lifecycle operation: controller Ansible is below the required version.
+    fail_msg: "Refusing lifecycle operation: controller Ansible is below the required version."
   delegate_to: localhost
   become: false
   run_once: true
@@ -171,7 +171,7 @@
       - item.version is defined
       - item.version is string
       - item.version | length > 0
-    fail_msg: Refusing lifecycle operation: a required controller tool has an invalid definition.
+    fail_msg: "Refusing lifecycle operation: a required controller tool has an invalid definition."
   loop: "{{ operation_guard_required_controller_tools }}"
   loop_control:
     label: "{{ item.name | default('unnamed') }}"
@@ -197,7 +197,7 @@
     that:
       - operation_guard_controller_tool_results.results[ansible_loop.index0].rc == 0
       - item.version in operation_guard_controller_tool_results.results[ansible_loop.index0].stdout
-    fail_msg: Refusing lifecycle operation: a required controller tool is unavailable or has the wrong version.
+    fail_msg: "Refusing lifecycle operation: a required controller tool is unavailable or has the wrong version."
   loop: "{{ operation_guard_required_controller_tools }}"
   loop_control:
     label: "{{ item.name }}"
@@ -210,7 +210,7 @@
   ansible.builtin.assert:
     that:
       - operation_guard_temporary_credential_files | select('string') | list | length == operation_guard_temporary_credential_files | length
-    fail_msg: Refusing lifecycle operation: a controller credential path is not a string.
+    fail_msg: "Refusing lifecycle operation: a controller credential path is not a string."
   delegate_to: localhost
   become: false
   run_once: true
@@ -231,15 +231,9 @@
     loop_var: operation_guard_sensitive_file
     label: "{{ operation_guard_sensitive_file }}"
   when: hostvars['localhost'].operation_guard_sensitive_files | length > 0
-  delegate_to: localhost
-  become: false
-  run_once: true
 
 - name: Validate the requested operation version boundary
   ansible.builtin.include_tasks: validate_operation.yml
-  delegate_to: localhost
-  become: false
-  run_once: true
 
 - name: Build validated parent operation context
   ansible.builtin.set_fact:

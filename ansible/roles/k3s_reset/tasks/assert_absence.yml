@@ -1,0 +1,46 @@
+---
+- name: Check cluster-owned paths are absent
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop: "{{ reset_absent_paths }}"
+  register: reset_absent_path_stats
+
+- name: Require cluster-owned paths absent
+  ansible.builtin.assert:
+    that: not item.stat.exists
+    fail_msg: "Cluster-owned path remains after reset: {{ item.item }}"
+  loop: "{{ reset_absent_path_stats.results }}"
+
+- name: Check K3s services are absent
+  ansible.builtin.command:
+    argv: [systemctl, "is-active", "{{ item }}"]
+  loop: [k3s, k3s-agent]
+  register: reset_service_state
+  changed_when: false
+  failed_when: false
+
+- name: Require K3s services inactive
+  ansible.builtin.assert:
+    that: item.rc != 0
+    fail_msg: "K3s service is still active: {{ item.item }}"
+  loop: "{{ reset_service_state.results }}"
+
+- name: Check K3s process absence
+  ansible.builtin.command:
+    argv: [pgrep, -f, "(^|/)k3s( |$)|(^|/)k3s-agent( |$)"]
+  register: reset_k3s_processes
+  changed_when: false
+  failed_when: false
+
+- name: Require K3s processes absent
+  ansible.builtin.assert:
+    that: reset_k3s_processes.rc != 0
+    fail_msg: K3s process remains after reset.
+
+- name: Require preserved host identity
+  ansible.builtin.assert:
+    that:
+      - ansible_hostname == reset_preservation_baseline.hostname
+      - ansible_distribution == reset_preservation_baseline.distribution
+      - ansible_kernel == reset_preservation_baseline.kernel
+    fail_msg: Host identity changed during reset.

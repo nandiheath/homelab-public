@@ -1,0 +1,59 @@
+---
+- name: Read the non-secret local user inventory
+  ansible.builtin.getent:
+    database: passwd
+
+- name: Read the current K3s version without secret material
+  ansible.builtin.command:
+    argv: [/usr/local/bin/k3s, --version]
+  register: reset_k3s_version
+  changed_when: false
+  failed_when: false
+
+- name: Read the host network addresses without secret material
+  ansible.builtin.command:
+    argv: [ip, --json, address, show]
+  register: reset_network_addresses
+  changed_when: false
+
+- name: Hash SSH configuration and host keys without reading them
+  ansible.builtin.command:
+    argv: [/usr/bin/find, /etc/ssh, -type, f, -exec, /usr/bin/sha256sum, '{}', '+']
+  register: reset_ssh_files
+  changed_when: false
+
+- name: Hash persistent network configuration without reading it
+  ansible.builtin.command:
+    argv: [/usr/bin/find, /etc/netplan, /etc/network, -type, f, -exec, /usr/bin/sha256sum, '{}', '+']
+  register: reset_network_config_files
+  changed_when: false
+  failed_when: false
+
+- name: Hash boot firmware without reading it
+  ansible.builtin.command:
+    argv: [/usr/bin/find, /boot/firmware, -type, f, -exec, /usr/bin/sha256sum, '{}', '+']
+  register: reset_boot_firmware_files
+  changed_when: false
+
+- name: Capture the preservation baseline
+  ansible.builtin.set_fact:
+    reset_preservation_baseline:
+      distribution: "{{ ansible_facts.distribution }}"
+      distribution_version: "{{ ansible_facts.distribution_version }}"
+      hostname: "{{ ansible_facts.hostname }}"
+      kernel: "{{ ansible_facts.kernel }}"
+      users: "{{ ansible_facts.getent_passwd.keys() | list | sort }}"
+      ssh_files: "{{ reset_ssh_files.stdout_lines | sort }}"
+      network_config_files: "{{ reset_network_config_files.stdout_lines | sort }}"
+      boot_firmware_files: "{{ reset_boot_firmware_files.stdout_lines | sort }}"
+
+- name: Emit approved non-secret host facts before reset
+  ansible.builtin.debug:
+    msg:
+      host: "{{ inventory_hostname }}"
+      hostname: "{{ reset_preservation_baseline.hostname }}"
+      os: "{{ reset_preservation_baseline.distribution }} {{ reset_preservation_baseline.distribution_version }}"
+      kernel: "{{ reset_preservation_baseline.kernel }}"
+      users: "{{ reset_preservation_baseline.users }}"
+      network_addresses: "{{ reset_network_addresses.stdout | from_json }}"
+      k3s_version: "{{ reset_k3s_version.stdout_lines }}"

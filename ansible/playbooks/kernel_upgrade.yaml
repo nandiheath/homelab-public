@@ -1,0 +1,21 @@
+---
+- name: Activate the pinned Raspberry Pi kernel
+  hosts: k3s_cluster
+  gather_facts: true
+  become: true
+  serial: 1
+  any_errors_fatal: true
+  vars:
+    kernel_operation_context: "{{ operation_context | default({}, true) }}"
+  pre_tasks:
+    - name: Require validated kernel authorization
+      ansible.builtin.include_role:
+        name: operation_guard
+      vars:
+        operation_guard_invocation: imported
+        operation_guard_parent_context: "{{ kernel_operation_context }}"
+        operation_guard_operation: kernel_activation
+        operation_guard_source_version: "{{ k3s_install_version }}"
+        operation_guard_target_version: "{{ k3s_target_version }}"
+  roles:
+    - role: raspi_kernel

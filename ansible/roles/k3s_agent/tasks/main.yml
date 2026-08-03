@@ -1,52 +1,45 @@
 ---
-- name: Get k3s installed version
-  ansible.builtin.command: k3s --version
-  register: k3s_version_output
-  changed_when: false
-  ignore_errors: true
+- name: Validate K3s agent install inputs
+  ansible.builtin.assert:
+    that:
+      - k3s_install_version is string
+      - k3s_releases[k3s_install_version] is defined
+      - k3s_install_script_sha256 is match('^[0-9a-f]{64}$')
+      - k3s_agent_token_file is string
+      - k3s_agent_token_file | length > 0
+    fail_msg: Pinned K3s agent installation inputs are incomplete.
 
-- name: Set k3s installed version
-  when: k3s_version_output.rc == 0
-  ansible.builtin.set_fact:
-    installed_k3s_version: "{{ k3s_version_output.stdout_lines[0].split(' ')[2] }}"
-
-# If airgapped, all K3s artifacts are already on the node.
-# We should be downloading and installing the newer version only if we are in one of the following cases :
-#   - we couldn't get k3s installed version in the first task of this role
-#   - the installed version of K3s on the nodes is older than the requested version in ansible vars
-- name: Download artifact only if needed
-  when: k3s_version_output.rc != 0 or installed_k3s_version is version(k3s_version, '<') and airgap_dir is undefined
-  block:
-    - name: Download K3s install script
-      ansible.builtin.get_url:
-        url: https://get.k3s.io/
-        timeout: 120
-        dest: /usr/local/bin/k3s-install.sh
-        owner: root
-        group: root
-        mode: "0755"
-
-    - name: Download K3s binary
-      ansible.builtin.command:
-        cmd: /usr/local/bin/k3s-install.sh
-      environment:
-        INSTALL_K3S_SKIP_START: "true"
-        INSTALL_K3S_VERSION: "{{ k3s_version }}"
-        INSTALL_K3S_EXEC: "agent"
-      changed_when: true
-
-- name: Copy K3s service file
-  register: k3s_agent_service
-  ansible.builtin.template:
-    src: "k3s-agent.service.j2"
-    dest: "{{ systemd_dir }}/k3s-agent.service"
+- name: Download checksum-pinned K3s installer
+  ansible.builtin.get_url:
+    url: https://get.k3s.io/
+    dest: /usr/local/lib/k3s-install.sh
     owner: root
     group: root
-    mode: "u=rw,g=r,o=r"
+    mode: '0700'
+    checksum: "sha256:{{ k3s_install_script_sha256 }}"
 
-- name: Enable and check K3s service
-  ansible.builtin.systemd:
-    name: k3s-agent
-    daemon_reload: "{{ true if k3s_agent_service.changed else false }}"
-    state: "{{ 'restarted' if k3s_agent_service.changed else 'started' }}"
-    enabled: true
+- name: Require root-only agent token file
+  ansible.builtin.stat:
+    path: "{{ k3s_agent_token_file }}"
+  register: k3s_agent_token
+
+- name: Assert root-only agent token file
+  ansible.builtin.assert:
+    that:
+      - k3s_agent_token.stat.exists
+      - k3s_agent_token.stat.pw_name == 'root'
+      - k3s_agent_token.stat.mode == '0600'
+    fail_msg: K3s agent token file must be root-owned and mode 0600.
+
+- name: Install agent using token file
+  ansible.builtin.command:
+    argv:
+      - /usr/local/lib/k3s-install.sh
+      - agent
+      - --server
+      - "https://{{ api_endpoint }}:6443"
+      - --token-file
+      - "{{ k3s_agent_token_file }}"
+  environment:
+    INSTALL_K3S_VERSION: "{{ k3s_install_version }}"
+  no_log: true

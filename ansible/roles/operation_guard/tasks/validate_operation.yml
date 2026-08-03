@@ -26,7 +26,7 @@
       - operation_guard_confirmation is defined
       - operation_guard_confirmation is string
       - operation_guard_confirmation == hostvars['localhost'].operation_guard_expected_confirmation
-    fail_msg: Refusing lifecycle operation: the direct confirmation is missing, mistyped, stale, or not exact.
+    fail_msg: "Refusing lifecycle operation: the direct confirmation is missing, mistyped, stale, or not exact."
   when: operation_guard_invocation == 'direct'
 
 - name: Require a validated parent operation context

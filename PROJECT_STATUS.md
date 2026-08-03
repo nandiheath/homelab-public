@@ -16,6 +16,7 @@ _Last observed: 2026-08-03_
 - Public lifecycle foundations now fail closed on host-key checking, cluster/version inventory shape, exact operation confirmations, controller-tool versions, and sensitive controller file permissions. `./scripts/validate.sh` passed on 2026-08-03 (350 resources; 243 valid; 0 invalid; 0 errors).
 - Longhorn desired state and committed render now set `defaultSettings.nodeDrainPolicy: block-for-eviction`; no backup target or recurring backup policy was introduced.
 - Cluster-health and maintenance roles passed `ansible-lint` (production profile) and the repository validation suite on 2026-08-03. Fixture coverage remains a required HLP-010 gate before live lifecycle use.
+- Reset, pinned Raspberry Pi kernel maintenance, and clean K3s install playbooks/roles passed their focused production-profile `ansible-lint` checks and `./scripts/validate.sh` on 2026-08-03. They remain offline-only until HLP-010 fixture coverage and verified production SSH host-key pins exist.
 
 ## Rollup protocol
 

@@ -1,0 +1,38 @@
+---
+# Every path below is owned by K3s, Cilium, or Longhorn. Do not add operating
+# system, SSH, boot, user, or general network configuration paths here.
+reset_kubeconfig: "{{ kubeconfig | default('', true) }}"
+reset_kubectl: "{{ controller_kubectl | default(playbook_dir ~ '/../../bin/kubectl', true) }}"
+reset_expected_servers: "{{ groups['server'] | default([]) }}"
+reset_wipe_role: ""
+
+reset_server_uninstall: /usr/local/bin/k3s-uninstall.sh
+reset_agent_uninstall: /usr/local/bin/k3s-agent-uninstall.sh
+reset_etcdctl: /var/lib/rancher/k3s/data/current/bin/etcdctl
+
+reset_cluster_owned_paths:
+  - /etc/rancher/k3s
+  - /var/lib/rancher/k3s
+  - /var/lib/longhorn
+  - /var/lib/cni/networks/cilium
+  - /etc/cni/net.d/05-cilium.conflist
+  - /etc/cni/net.d/cilium-cni.conf
+  - /run/cilium
+  - /var/run/cilium
+  - /run/flannel
+  - /var/run/flannel
+
+reset_absent_paths:
+  - /etc/rancher/k3s
+  - /var/lib/rancher/k3s
+  - /var/lib/longhorn
+  - /var/lib/cni/networks/cilium
+  - /etc/cni/net.d/05-cilium.conflist
+  - /etc/cni/net.d/cilium-cni.conf
+  - /run/cilium
+  - /var/run/cilium
+  - /run/flannel
+  - /var/run/flannel
+  - /usr/local/bin/k3s
+  - /usr/local/bin/k3s-uninstall.sh
+  - /usr/local/bin/k3s-agent-uninstall.sh
