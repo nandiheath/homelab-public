@@ -5,9 +5,11 @@
   become: true
   serial: 1
   any_errors_fatal: true
-  roles:
-    - role: k3s_reset
-      tasks_from: capture_host_facts.yml
+  tasks:
+    - name: Capture host preservation baseline
+      ansible.builtin.include_role:
+        name: k3s_reset
+        tasks_from: capture_host_facts
 
 - name: Recheck the live cluster immediately before reset authorization
   hosts: localhost
@@ -17,9 +19,11 @@
   vars:
     reset_kubeconfig: "{{ kubeconfig | default('', true) }}"
     reset_kubectl: "{{ controller_kubectl | default(playbook_dir ~ '/../../bin/kubectl', true) }}"
-  roles:
-    - role: k3s_reset
-      tasks_from: preflight.yml
+  tasks:
+    - name: Recheck reset preflight
+      ansible.builtin.include_role:
+        name: k3s_reset
+        tasks_from: preflight
 
 - name: Authorize the destructive K3s reset
   hosts: localhost
@@ -78,6 +82,8 @@
   become: false
   vars:
     reset_kubeconfig: "{{ kubeconfig | default('', true) }}"
-  roles:
-    - role: k3s_reset
-      tasks_from: final.yml
+  tasks:
+    - name: Verify final reset absence
+      ansible.builtin.include_role:
+        name: k3s_reset
+        tasks_from: final

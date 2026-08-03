@@ -6,6 +6,7 @@
 
 ## Owned paths
 
+- `ansible/playbooks/reset.yaml`
 - `docs/operations-runbook.md`
 - `skills/k3s-lifecycle/SKILL.md`
 - `tasks/running/HLP-005-clean-cluster-rebuild.md`
@@ -31,15 +32,15 @@ Update the operator runbook and lifecycle skill for the direct `v1.36.2+k3s1` in
 
 - `source ./bin/activate-hermit && ./scripts/validate-ansible.sh`
 - `source ./bin/activate-hermit && ./scripts/validate.sh`
-- No live reset, install, cluster, router, or remote host operation is authorized by this task.
+- Live reset, install, cluster, router, and remote-host operations require explicit current-session authorization; the reset authorization was supplied for this attempt.
 
 ## Blockers
 
-- None for offline documentation work. Live execution remains blocked on verified production SSH host-key pins and explicit current-session authorization.
+- Offline documentation and lifecycle validation are complete. The authorized reset reached its read-only capture and preflight, then stopped before mutation because remote `sudo` required an unavailable password.
 
 ## Completion handoff
 
-- Summary:
-- Files changed:
-- Observed verification:
-- Follow-ups:
+- Summary: Repaired `ansible/playbooks/reset.yaml` to use `include_role` task entrypoints for capture, preflight, and final verification. The authorized reset did not mutate infrastructure.
+- Files changed: `ansible/playbooks/reset.yaml`; `tasks/running/HLP-005-clean-cluster-rebuild.md`.
+- Observed verification: Reset syntax and task expansion passed; `./scripts/validate-ansible.sh` and `./scripts/validate.sh` passed (`352` resources; `245` valid; `0` invalid; `0` errors; `107` skipped). The live reset captured non-secret host baselines, then failed at preflight privilege escalation with `sudo: a password is required`; no wipe task ran and no Kubernetes data was removed.
+- Follow-ups: Provide the approved remote become credential through the controller's secure boundary, then supply a fresh exact reset confirmation and rerun only the reset phase. Later phases still require separate confirmations.
