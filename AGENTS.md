@@ -1,0 +1,39 @@
+# Agent Guide
+
+## Session protocol
+
+1. Read this guide and `PROJECT_STATUS.md`; then inspect the task document before changing files.
+2. Claim only one dependency-ready task by moving it from `tasks/planned/` to `tasks/running/`, setting `Status: running`, and recording yourself as its sole owner.
+3. Work in a dedicated worktree. A task's `Owned paths` must be disjoint from every task in `tasks/running/`.
+4. Run the focused proof in the task. Record observed output for every acceptance criterion in its completion handoff.
+5. Do not merge or delete task files. The serial rollup owner does that after integration verification, updates `PROJECT_STATUS.md`, and removes successful task documents.
+
+## Repository map
+
+- `manifests/infrastructure/` — kustomize source for the cluster's public desired state.
+- `artifacts/infrastructure/` — committed render output; source changes that affect it must update it.
+- `scripts/render.sh` — local renderer. It rewrites `artifacts/`.
+- `scripts/validate.sh` — authoritative offline validation: actionlint, shellcheck, render, and kubeconform.
+- `ansible/` — host bootstrap and maintenance playbooks. These target real hosts when run.
+- `scripts/bootstrap.sh` — applies to a live Kubernetes cluster and reads 1Password credentials; never run without explicit user authorization.
+- `scripts/validate-repository-graph.sh` — cross-repository check; requires the private repository and its denylist.
+- `tasks/` — path-owned multi-agent work contracts; see `tasks/README.md`.
+
+## Commands
+
+```bash
+source bin/activate-hermit
+./scripts/validate.sh
+```
+
+`./scripts/validate.sh` uses only local tooling and writes generated files under `artifacts/`; it does not contact a cluster. Run it in the task worktree, inspect and include intended generated changes, and never run it concurrently against the same worktree.
+
+For a focused render, use `./scripts/render.sh --app <name> --infra`. It also rewrites its corresponding `artifacts/infrastructure/<name>/` directory.
+
+## Safety gates
+
+- Never use `kubectl`, run Ansible playbooks against non-fixture inventory, execute `scripts/bootstrap.sh`, apply manifests, deploy, publish, or mutate remote infrastructure without explicit user authorization in this conversation.
+- Do not read, add, print, or commit `credentials/`, `config/.env`, Terraform state, or other ignored secrets.
+- Preserve the public/private boundary. Cross-repository validation requires the private repository only when explicitly authorized and available.
+- Do not change generated artifacts by hand when `scripts/render.sh` can produce them.
+- Do not claim overlapping paths or edit another active task's owned paths.
