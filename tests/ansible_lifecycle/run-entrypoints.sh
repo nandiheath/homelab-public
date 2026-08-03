@@ -75,7 +75,7 @@ network_args=(
   -e controller_kubectl=/bin/false
   -e "private_cilium_artifact=$repo_root/artifacts/infrastructure/cilium"
   -e "public_cilium_artifact=$repo_root/artifacts/infrastructure/cilium"
-  -e api_endpoint=10.43.2.1
+  -e api_endpoint=192.0.2.11
 )
 reset_args=(-l localhost -e "kubeconfig=$fixture_kubeconfig" -e controller_kubectl=/bin/false)
 
