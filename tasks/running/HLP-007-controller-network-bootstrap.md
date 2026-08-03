@@ -1,7 +1,7 @@
 # HLP-007 — Controller network bootstrap
 
-- Status: planned
-- Owner: unassigned
+- Status: running
+- Owner: Main
 - Depends on: HLP-001, HLP-005, HL-003
 
 ## Owned paths
