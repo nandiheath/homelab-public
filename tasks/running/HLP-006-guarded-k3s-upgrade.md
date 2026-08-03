@@ -1,7 +1,7 @@
 # HLP-006 — Guarded K3s upgrade
 
-- Status: planned
-- Owner: unassigned
+- Status: running
+- Owner: Main
 - Depends on: HLP-001, HLP-002, HLP-005
 
 ## Owned paths
