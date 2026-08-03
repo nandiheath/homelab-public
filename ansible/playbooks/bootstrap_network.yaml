@@ -1,0 +1,43 @@
+---
+- name: Authorize controller-local Cilium bootstrap
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  become: false
+  vars:
+    network_kubeconfig: "{{ kubeconfig | default('', true) }}"
+    network_cilium_artifact: "{{ private_cilium_artifact | default('', true) }}"
+    network_api_endpoint: "{{ api_endpoint | default('', true) }}"
+  pre_tasks:
+    - name: Require private Cilium bootstrap inputs
+      ansible.builtin.assert:
+        that:
+          - network_cilium_artifact is string
+          - network_cilium_artifact | length > 0
+          - network_api_endpoint is string
+          - network_api_endpoint != '192.0.2.11'
+        fail_msg: Private Cilium artifact and endpoint are required.
+  roles:
+    - role: operation_guard
+      vars:
+        operation_guard_operation: bootstrap_network
+        operation_guard_source_version: "{{ k3s_install_version }}"
+        operation_guard_target_version: "{{ k3s_target_version }}"
+        operation_guard_kubeconfig: "{{ network_kubeconfig }}"
+  tasks:
+    - name: Reject public documentation endpoint in private artifact
+      ansible.builtin.command:
+        argv: [grep, -R, --fixed-strings, '192.0.2.11', "{{ network_cilium_artifact }}"]
+      register: network_public_endpoint
+      changed_when: false
+      failed_when: network_public_endpoint.rc == 0
+
+    - name: Apply private Cilium artifact from controller
+      ansible.builtin.command:
+        argv: ["{{ controller_kubectl }}", --kubeconfig, "{{ network_kubeconfig }}", apply, -f, "{{ network_cilium_artifact }}"]
+      changed_when: true
+
+    - name: Wait for Cilium rollout from controller
+      ansible.builtin.command:
+        argv: ["{{ controller_kubectl }}", --kubeconfig, "{{ network_kubeconfig }}", -n, kube-system, rollout, status, daemonset/cilium, --timeout=10m]
+      changed_when: false

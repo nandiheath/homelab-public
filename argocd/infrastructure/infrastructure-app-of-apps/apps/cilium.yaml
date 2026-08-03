@@ -3,5 +3,8 @@ kind: Application
 metadata:
   name: cilium
 spec:
+  project: homelab-private
   source:
+    repoURL: https://github.com/nandiheath/homelab-private.git
+    targetRevision: HEAD
     path: artifacts/infrastructure/cilium
