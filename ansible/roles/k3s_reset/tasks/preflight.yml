@@ -32,14 +32,28 @@
   become: true
 
 - name: Refresh live user inventory immediately before reset authorization
-  ansible.builtin.getent:
-    database: passwd
+  ansible.builtin.command:
+    argv: [/usr/bin/getent, passwd]
   loop: "{{ groups['k3s_cluster'] }}"
   loop_control:
     label: "{{ item }}"
+  register: reset_preflight_users
+  changed_when: false
   delegate_to: "{{ item }}"
-  delegate_facts: true
   become: true
+- name: Require exact live host identity before accepting reset confirmation
+  ansible.builtin.assert:
+    that:
+      - hostvars[item.0].ansible_facts.hostname == hostvars[item.0].reset_preservation_baseline.hostname
+      - hostvars[item.0].ansible_facts.distribution == hostvars[item.0].reset_preservation_baseline.distribution
+      - hostvars[item.0].ansible_facts.distribution_version == hostvars[item.0].reset_preservation_baseline.distribution_version
+      - hostvars[item.0].ansible_facts.os_family == hostvars[item.0].reset_preservation_baseline.os_family
+      - hostvars[item.0].ansible_facts.kernel == hostvars[item.0].reset_preservation_baseline.kernel
+      - item.1.rc == 0
+      - (item.1.stdout_lines | map('regex_replace', ':.*$', '') | list | sort) == hostvars[item.0].reset_preservation_baseline.users
+  loop: "{{ groups['k3s_cluster'] | zip(reset_preflight_users.results) | list }}"
+  loop_control:
+    label: "{{ item.0 }}"
 
 - name: Read live network addresses immediately before reset authorization
   ansible.builtin.command:
@@ -52,18 +66,6 @@
   delegate_to: "{{ item }}"
   become: true
 
-- name: Require exact live host identity before accepting reset confirmation
-  ansible.builtin.assert:
-    that:
-      - hostvars[item].ansible_facts.hostname == hostvars[item].reset_preservation_baseline.hostname
-      - hostvars[item].ansible_facts.distribution == hostvars[item].reset_preservation_baseline.distribution
-      - hostvars[item].ansible_facts.distribution_version == hostvars[item].reset_preservation_baseline.distribution_version
-      - hostvars[item].ansible_facts.os_family == hostvars[item].reset_preservation_baseline.os_family
-      - hostvars[item].ansible_facts.kernel == hostvars[item].reset_preservation_baseline.kernel
-      - hostvars[item].ansible_facts.getent_passwd.keys() | list | sort == hostvars[item].reset_preservation_baseline.users
-  loop: "{{ groups['k3s_cluster'] }}"
-  loop_control:
-    label: "{{ item }}"
 
 - name: Require exact live network identity before accepting reset confirmation
   ansible.builtin.assert:

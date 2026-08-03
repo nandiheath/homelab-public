@@ -7,6 +7,7 @@
 ## Owned paths
 
 - `ansible/playbooks/reset.yaml`
+- `ansible/roles/k3s_reset/tasks/preflight.yml`
 - `docs/operations-runbook.md`
 - `skills/k3s-lifecycle/SKILL.md`
 - `tasks/running/HLP-005-clean-cluster-rebuild.md`
@@ -36,11 +37,11 @@ Update the operator runbook and lifecycle skill for the direct `v1.36.2+k3s1` in
 
 ## Blockers
 
-- Offline documentation and lifecycle validation are complete. The authorized reset reached its read-only capture and preflight, then stopped before mutation because remote `sudo` required an unavailable password.
+- The next reset retry passed privilege escalation and interpreter setup but stopped before mutation because `ansible.builtin.getent` searched the controller's macOS PATH. It has been replaced with a remote `/usr/bin/getent passwd` command and explicit user-list comparison.
 
 ## Completion handoff
 
-- Summary: Repaired `ansible/playbooks/reset.yaml` to use `include_role` task entrypoints for capture, preflight, and final verification. The authorized reset did not mutate infrastructure.
-- Files changed: `ansible/playbooks/reset.yaml`; `tasks/running/HLP-005-clean-cluster-rebuild.md`.
-- Observed verification: Reset syntax and task expansion passed; `./scripts/validate-ansible.sh` and `./scripts/validate.sh` passed (`352` resources; `245` valid; `0` invalid; `0` errors; `107` skipped). The live reset captured non-secret host baselines, then failed at preflight privilege escalation with `sudo: a password is required`; no wipe task ran and no Kubernetes data was removed.
-- Follow-ups: Provide the approved remote become credential through the controller's secure boundary, then supply a fresh exact reset confirmation and rerun only the reset phase. Later phases still require separate confirmations.
+- Summary: Repaired `ansible/playbooks/reset.yaml` to use `include_role` task entrypoints and repaired `ansible/roles/k3s_reset/tasks/preflight.yml` to read remote users without the controller-only `getent` action lookup. No reset mutation has completed.
+- Files changed: `ansible/playbooks/reset.yaml`; `ansible/roles/k3s_reset/tasks/preflight.yml`; `tasks/running/HLP-005-clean-cluster-rebuild.md`.
+- Observed verification: Reset syntax and task expansion passed; `./scripts/validate-ansible.sh` and `./scripts/validate.sh` passed (`352` resources; `245` valid; `0` invalid; `0` errors; `107` skipped). Read-only raw checks found `/usr/bin/getent` on all three nodes. No wipe task, reboot, install, network bootstrap, GitOps bootstrap, or Kubernetes data mutation ran.
+- Follow-ups: Supply a fresh exact reset confirmation and rerun only reset with `--ask-become-pass`. Later phases still require separate confirmations.
