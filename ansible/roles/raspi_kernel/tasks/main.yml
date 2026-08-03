@@ -15,12 +15,16 @@
   ansible.builtin.set_fact:
     raspi_kernel_previous_release: "{{ ansible_kernel }}"
 
-- name: Require the expected pre-maintenance kernel in cluster-absent mode
+- name: Require an approved pre-maintenance kernel in cluster-absent mode
   ansible.builtin.assert:
     that:
-      - raspi_kernel_previous_release == raspi_kernel_fallback_release
-    fail_msg: Cluster-absent kernel maintenance requires the expected retained fallback kernel.
+      - raspi_kernel_previous_release in [raspi_kernel_fallback_release, raspi_kernel_release]
+    fail_msg: Cluster-absent kernel maintenance requires the retained fallback or already-active pinned kernel.
   when: raspi_kernel_mode == 'cluster_absent'
+
+- name: Determine whether pinned-kernel reboot is required
+  ansible.builtin.set_fact:
+    raspi_kernel_reboot_required: "{{ raspi_kernel_previous_release != raspi_kernel_release }}"
 
 - name: Require K3s absence for cluster-absent maintenance
   ansible.builtin.command:
@@ -77,16 +81,50 @@
     - [apt-get, check]
   changed_when: false
 
+- name: Inspect exact pinned kernel package versions before installation
+  ansible.builtin.command:
+    argv:
+      - dpkg-query
+      - -W
+      - "-f=${Version}"
+      - "{{ item.split('=')[0] }}"
+  register: raspi_kernel_existing_packages
+  changed_when: false
+  failed_when: false
+  loop: "{{ raspi_kernel_packages }}"
+  loop_control:
+    label: "{{ item.split('=')[0] }}"
+
+- name: Determine whether pinned kernel package installation is required
+  ansible.builtin.set_fact:
+    raspi_kernel_install_required: >-
+      {{
+        raspi_kernel_existing_packages.results
+        | selectattr('rc', 'ne', 0)
+        | list
+        | length > 0
+        or
+        raspi_kernel_existing_packages.results
+        | map(attribute='stdout')
+        | list
+        !=
+        raspi_kernel_packages
+        | map('regex_replace', '^[^=]+=', '')
+        | list
+      }}
+
 - name: Inspect boot firmware capacity
   ansible.builtin.command:
-    argv: [df, -Pk, "{{ raspi_kernel_boot_path }}"]
+    argv: [df, -Pk, "{{ raspi_kernel_boot_capacity_path }}"]
   register: raspi_kernel_boot_capacity
   changed_when: false
+  when: raspi_kernel_install_required
 
 - name: Require boot firmware free capacity
   ansible.builtin.assert:
     that: (raspi_kernel_boot_capacity.stdout_lines[-1].split()[3] | int) >= 18432
     fail_msg: Boot firmware partition lacks the required 18 MiB free capacity.
+  when: raspi_kernel_install_required
 
 - name: Install only exact pinned kernel packages
   ansible.builtin.apt:
@@ -95,6 +133,7 @@
     update_cache: false
     allow_downgrade: false
     autoremove: false
+  when: raspi_kernel_install_required
 
 - name: Verify exact pinned kernel package versions
   ansible.builtin.command:
@@ -123,11 +162,13 @@
   ansible.builtin.reboot:
     reboot_timeout: 600
     post_reboot_delay: 5
+  when: raspi_kernel_reboot_required
 
 - name: Refresh kernel facts after reboot
   ansible.builtin.setup:
     gather_subset:
       - kernel
+  when: raspi_kernel_reboot_required
 
 - name: Require the exact active kernel release
   ansible.builtin.command:

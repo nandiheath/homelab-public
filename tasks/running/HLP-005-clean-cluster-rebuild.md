@@ -1,12 +1,13 @@
 # HLP-005 - Clean latest-minor cluster rebuild
 
-- Status: running
+- Status: blocked
 - Owner: Main
 - Depends on: HLP-004
 
 ## Owned paths
 - `AGENTS.md`
 - `ansible/roles/operation_guard/`
+- `ansible/roles/raspi_kernel/`
 - `ansible/roles/raspberry_pi/files/scripts/setup-boot-volume.sh`
 
 - `ansible/playbooks/reset.yaml`
@@ -53,11 +54,13 @@ Update the operator runbook and lifecycle skill for the direct `v1.36.2+k3s1` in
 
 ## Blockers
 
-- The live K3s installation remains nonconforming: it has default Flannel, kube-proxy, Traefik, ServiceLB, the default Pod CIDR, and a Service CIDR that overlaps the physical LAN. The offline install/Cilium correction and fixtures now validate successfully, but another reset/reinstall and Cilium bootstrap require fresh phase-specific current-session authorizations.
+- The cluster is absent and all three nodes are online on the pinned kernel with the retained fallback. The next live phase is the separately guarded direct K3s install and requires a fresh exact current-session authorization.
 
 ## Completion handoff
 
 - Summary: The earlier authorized reset and three-server install preserved the hosts and formed healthy embedded etcd, but the legacy free-form network arguments were not passed to the K3s installer. The offline repair replaces that contract with validated role-owned Pod/Service/DNS and disabled-component arguments, pins explicit Kubernetes node identities, requires the exact pre-CNI `NetworkPluginNotReady` state, and makes Cilium bootstrap independent of pre-existing CNI, DNS, cert-manager, and GitOps. Bootstrap applies a mode-restricted temporary copy that omits only the Hubble `Certificate` and disables Hubble TLS, then verifies Cilium, node readiness, CoreDNS, DNS resolution, and zero Applications/PVCs before removing all temporary resources.
 - Files changed: `AGENTS.md`; `ansible/playbooks/bootstrap_network.yaml`; `ansible/roles/operation_guard/`; `ansible/roles/raspberry_pi/files/scripts/setup-boot-volume.sh`; `ansible/roles/k3s_server/defaults/main.yml`; `ansible/roles/k3s_server/tasks/main.yml`; `ansible/roles/k3s_server/tasks/validate_network.yml`; `ansible/roles/k3s_server/templates/`; `ansible/inventory.example.yml`; `tests/ansible_lifecycle/inventory.yml`; `tests/ansible_lifecycle/k3s_network_contract.yml`; `tests/ansible_lifecycle/run-fixtures.sh`; `tests/ansible_lifecycle/run-entrypoints.sh`; `docs/operations-runbook.md`; `skills/k3s-lifecycle/SKILL.md`; `tasks/running/HLP-005-clean-cluster-rebuild.md`; private inventory, renderer, validation, Cilium source/artifact, topology documentation, and global cross-repository knowledge reference.
+- Kernel-phase files changed: `ansible/roles/raspi_kernel/defaults/main.yml`; `ansible/roles/raspi_kernel/tasks/main.yml`. The role now distinguishes `/boot` kernel artifacts from `/boot/firmware` capacity, accepts an already-active pinned kernel for safe resume, and skips capacity/install/reboot work only when exact pinned packages and the target kernel are already active.
 - Observed verification: The prior authorized reset/install completed with `0` failed and `0` unreachable hosts and produced three unique healthy `v3.6.12` voting members at K3s `v1.36.2+k3s1`; later inspection proved the installed unit omitted the intended network arguments, so that live result is not accepted as the clean-cluster network state. After the offline repair and public sanitization, `source ./bin/activate-hermit && ./scripts/validate-ansible.sh`, `./scripts/validate.sh`, and `./scripts/validate-repository-graph.sh ../homelab-private` all passed. A repository-wide search found no production cluster identity, workstation absolute path, production node identity, or private address range in the public repository. Private rendering and `make validate` also passed. No live cluster, router, or remote-host mutation was performed during this repair.
-- Follow-ups: Obtain a fresh exact reset confirmation and rebuild the live cluster with the corrected installer contract. Then obtain the separate network-bootstrap confirmation and prove private Cilium acceptance, followed by the separate GitOps confirmation and final Applications, PVCs, smoke-test, and credential-residue criteria.
+- Kernel-phase evidence: authorization `ACTIVATE KERNEL 5.15.0-1105-raspi ON homelab-production` was recorded at `2026-08-03T20:59:39Z`. The guarded serial play completed with every node at `ok=25 changed=0 unreachable=0 failed=0`; all exact package, active-kernel, retained-fallback, boot-file, package-integrity, and K3s-absence assertions passed. Independent strict-SSH checks returned `node-rpi-0`, `node-rpi-1`, and `node-rpi-2` on `5.15.0-1105-raspi`, found both `/boot/vmlinuz-5.15.0-1102-raspi` and `/boot/vmlinuz-5.15.0-1105-raspi`, and confirmed K3s paths/service absent. TCP 6443 was closed on all three addresses and the controller kubeconfig remained absent. Post-phase `./scripts/validate-ansible.sh`, `./scripts/validate.sh`, `./scripts/validate-repository-graph.sh ../homelab-private`, and private `make validate` passed.
+- Follow-ups: Obtain a fresh exact install confirmation and perform the guarded direct three-server K3s install with the corrected network contract. Then obtain the separate network-bootstrap confirmation and prove private Cilium acceptance, followed by the separate GitOps confirmation and final Applications, PVCs, smoke-test, and credential-residue criteria.
