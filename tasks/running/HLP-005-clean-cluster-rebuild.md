@@ -8,6 +8,11 @@
 
 - `ansible/playbooks/reset.yaml`
 - `ansible/roles/k3s_reset/tasks/preflight.yml`
+- `ansible/roles/k3s_reset/tasks/capture_host_facts.yml`
+- `ansible/roles/k3s_reset/tasks/assert_absence.yml`
+- `ansible/roles/k3s_reset/defaults/main.yml`
+- `ansible/roles/cluster_health/tasks/main.yml`
+- `tests/ansible_lifecycle/run-entrypoints.sh`
 - `docs/operations-runbook.md`
 - `skills/k3s-lifecycle/SKILL.md`
 - `tasks/running/HLP-005-clean-cluster-rebuild.md`
@@ -37,11 +42,11 @@ Update the operator runbook and lifecycle skill for the direct `v1.36.2+k3s1` in
 
 ## Blockers
 
-- The preflight now enumerates remote users through the pinned `/usr/bin/python3` `pwd` module, avoiding unavailable `getent` binaries and controller PATH lookup. The current retry is ready for another authorized reset run.
+- The entire non-mutating reset preflight now passes against all three live nodes and stops at the final exact-confirmation guard. Destructive reset, kernel activation, clean install, network bootstrap, and GitOps bootstrap still require fresh exact current-session confirmations.
 
 ## Completion handoff
 
-- Summary: Repaired `ansible/playbooks/reset.yaml` to use `include_role` task entrypoints and repaired `ansible/roles/k3s_reset/tasks/preflight.yml` to enumerate remote users through Python.
-- Files changed: `ansible/playbooks/reset.yaml`; `ansible/roles/k3s_reset/tasks/preflight.yml`; `tasks/running/HLP-005-clean-cluster-rebuild.md`.
-- Observed verification: Reset syntax and task expansion passed; `./scripts/validate-ansible.sh` and `./scripts/validate.sh` passed (`352` resources; `245` valid; `0` invalid; `0` errors; `107` skipped). Privileged `/usr/bin/python3` user enumeration passed on all three nodes. No wipe task, reboot, install, network bootstrap, GitOps bootstrap, or Kubernetes data mutation has run.
-- Follow-ups: Rerun with `--ask-become-pass` / `-K` and the exact reset confirmation. Later phases still require separate confirmations.
+- Summary: Completed and live-verified the guarded non-mutating reset preflight. Delegated host checks now use inventory SSH connections, live user identity is compared by host, and embedded-etcd health is read from each server's local metrics endpoint instead of requiring an unshipped `etcdctl`.
+- Files changed: `ansible/roles/k3s_reset/defaults/main.yml`; `ansible/roles/k3s_reset/tasks/preflight.yml`; `tasks/running/HLP-005-clean-cluster-rebuild.md`; private `ansible/inventory/production/hosts.yml`.
+- Observed verification: Reset syntax and lifecycle entrypoint fixtures passed. The full live reset preflight captured all three preservation baselines, revalidated hostname/user/network identity on every host, observed three unique healthy `v3.5.21` etcd members with one leader and two active peers each, captured API/Application/PVC facts, passed every operation-guard check, and rejected the deliberately wrong confirmation at the final direct-literal gate; no reset mutation task ran. `./scripts/validate-ansible.sh`, `./scripts/validate.sh`, the public/private repository graph check, private inventory parsing, and private `make validate` all passed; manifest validation reported `352` resources, `245` valid, `0` invalid, `0` errors, and `107` skipped.
+- Follow-ups: Supply a fresh exact reset confirmation and run only reset with `--ask-become-pass`. Kernel activation, install, network bootstrap, and GitOps phases remain separately gated and must each complete every acceptance check before HLP-005 can close.

@@ -70,6 +70,17 @@ assert_tasks() {
   fi
 }
 
+reset_preflight_connection="$(
+  yq eval \
+    '.[] | select(.name == "Recheck the live cluster immediately before reset authorization") | .connection // ""' \
+    "$repo_root/ansible/playbooks/reset.yaml"
+)"
+if [[ -n "$reset_preflight_connection" ]]; then
+  printf '%s\n' \
+    'Reset preflight must inherit localhost locally while allowing delegated hosts to use inventory SSH connections.' >&2
+  exit 1
+fi
+
 network_args=(
   -e "kubeconfig=$fixture_kubeconfig"
   -e controller_kubectl=/bin/false

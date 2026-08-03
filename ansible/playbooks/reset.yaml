@@ -13,7 +13,6 @@
 
 - name: Recheck the live cluster immediately before reset authorization
   hosts: localhost
-  connection: local
   gather_facts: false
   become: false
   vars:

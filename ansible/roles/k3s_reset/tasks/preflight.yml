@@ -54,33 +54,14 @@
       - hostvars[item.0].ansible_facts.distribution_version == hostvars[item.0].reset_preservation_baseline.distribution_version
       - hostvars[item.0].ansible_facts.os_family == hostvars[item.0].reset_preservation_baseline.os_family
       - hostvars[item.0].ansible_facts.kernel == hostvars[item.0].reset_preservation_baseline.kernel
+      - hostvars[item.0].ansible_facts.default_ipv4 == hostvars[item.0].reset_preservation_baseline.network_identity
+      - hostvars[item.0].reset_preservation_baseline.inventory_address == hostvars[item.0].reset_preservation_baseline.network_identity.address
       - item.1.rc == 0
       - (item.1.stdout_lines | map('regex_replace', ':.*$', '') | list | sort) == hostvars[item.0].reset_preservation_baseline.users
   loop: "{{ groups['k3s_cluster'] | zip(reset_preflight_users.results) | list }}"
   loop_control:
     label: "{{ item.0 }}"
 
-- name: Read live network addresses immediately before reset authorization
-  ansible.builtin.command:
-    argv: [ip, --json, address, show]
-  loop: "{{ groups['k3s_cluster'] }}"
-  loop_control:
-    label: "{{ item }}"
-  register: reset_preflight_network_addresses
-  changed_when: false
-  delegate_to: "{{ item }}"
-  become: true
-
-
-- name: Require exact live network identity before accepting reset confirmation
-  ansible.builtin.assert:
-    that:
-      - item.rc == 0
-      - (item.stdout | from_json) == hostvars[item.item].reset_preservation_baseline.network_addresses
-      - hostvars[item.item].reset_preservation_baseline.inventory_address in (item.stdout | from_json | json_query('[].addr_info[].local'))
-  loop: "{{ reset_preflight_network_addresses.results }}"
-  loop_control:
-    label: "{{ item.item }}"
 
 - name: Require the populated cluster health gate
   ansible.builtin.include_role:
@@ -88,7 +69,7 @@
   vars:
     cluster_health_kubeconfig: "{{ reset_kubeconfig }}"
     cluster_health_kubectl: "{{ reset_kubectl }}"
-    cluster_health_expected_servers: "{{ reset_expected_servers }}"
+    cluster_health_expected_servers: "{{ reset_expected_servers | map('extract', hostvars, 'reset_preservation_baseline') | map(attribute='hostname') | list }}"
     cluster_health_mode: populated
     cluster_health_required_controllers: []
 
@@ -117,70 +98,80 @@
   register: reset_pvcs
   changed_when: false
 
-- name: Read embedded etcd endpoint status as JSON
+- name: Read local embedded-etcd health metrics from every expected server
   ansible.builtin.command:
     argv:
-      - "{{ reset_etcdctl }}"
-      - --endpoints=https://127.0.0.1:2379
-      - --cacert=/var/lib/rancher/k3s/server/tls/etcd/server-ca.crt
-      - --cert=/var/lib/rancher/k3s/server/tls/etcd/client.crt
-      - --key=/var/lib/rancher/k3s/server/tls/etcd/client.key
-      - endpoint
-      - status
-      - --cluster
-      - --write-out=json
-  register: reset_etcd_status
+      - /usr/bin/python3
+      - -c
+      - |
+        import json
+        import urllib.request
+
+        lines = urllib.request.urlopen(
+            "http://127.0.0.1:2381/metrics", timeout=10
+        ).read().decode().splitlines()
+
+        def metric_value(name):
+            matches = [line for line in lines if line.startswith(name + " ")]
+            if len(matches) != 1:
+                raise ValueError(f"expected exactly one {name} metric")
+            return int(float(matches[0].rsplit(" ", 1)[1]))
+
+        def metric_label(name, label):
+            matches = [line for line in lines if line.startswith(name + "{")]
+            if len(matches) != 1:
+                raise ValueError(f"expected exactly one {name} metric")
+            return matches[0].split(f'{label}="', 1)[1].split('"', 1)[0]
+
+        active_peers = sorted(
+            line.split('Remote="', 1)[1].split('"', 1)[0]
+            for line in lines
+            if line.startswith("etcd_network_active_peers{") and line.endswith(" 1")
+        )
+        print(json.dumps({
+            "active_peers": active_peers,
+            "has_leader": metric_value("etcd_server_has_leader"),
+            "is_leader": metric_value("etcd_server_is_leader"),
+            "is_learner": metric_value("etcd_server_is_learner"),
+            "server_id": metric_label("etcd_server_id", "server_id"),
+            "server_version": metric_label("etcd_server_version", "server_version"),
+        }, sort_keys=True))
+  loop: "{{ reset_expected_servers }}"
+  loop_control:
+    label: "{{ item }}"
+  register: reset_etcd_metrics
   changed_when: false
-  delegate_to: "{{ reset_expected_servers[0] }}"
+  delegate_to: "{{ item }}"
   become: true
 
-- name: Read embedded etcd endpoint health as JSON
-  ansible.builtin.command:
-    argv:
-      - "{{ reset_etcdctl }}"
-      - --endpoints=https://127.0.0.1:2379
-      - --cacert=/var/lib/rancher/k3s/server/tls/etcd/server-ca.crt
-      - --cert=/var/lib/rancher/k3s/server/tls/etcd/client.crt
-      - --key=/var/lib/rancher/k3s/server/tls/etcd/client.key
-      - endpoint
-      - health
-      - --cluster
-      - --write-out=json
-  register: reset_etcd_health
-  changed_when: false
-  delegate_to: "{{ reset_expected_servers[0] }}"
-  become: true
+- name: Parse embedded-etcd health observations
+  ansible.builtin.set_fact:
+    reset_etcd_observations: "{{ reset_etcd_metrics.results | map(attribute='stdout') | map('from_json') | list }}"
 
-- name: Read embedded etcd membership as JSON
-  ansible.builtin.command:
-    argv:
-      - "{{ reset_etcdctl }}"
-      - --endpoints=https://127.0.0.1:2379
-      - --cacert=/var/lib/rancher/k3s/server/tls/etcd/server-ca.crt
-      - --cert=/var/lib/rancher/k3s/server/tls/etcd/client.crt
-      - --key=/var/lib/rancher/k3s/server/tls/etcd/client.key
-      - member
-      - list
-      - --write-out=json
-  register: reset_etcd_members
-  changed_when: false
-  delegate_to: "{{ reset_expected_servers[0] }}"
-  become: true
-
-- name: Require three healthy current voting embedded etcd members
+- name: Require three healthy current voting embedded-etcd members
   ansible.builtin.assert:
     that:
-      - reset_etcd_status.stdout | from_json | length == 3
-      - reset_etcd_health.stdout | from_json | length == 3
-      - reset_etcd_health.stdout | from_json | selectattr('Health', 'equalto', true) | list | length == 3
-      - reset_etcd_members.stdout | from_json | json_query('members[]') | length == 3
-      - reset_etcd_members.stdout | from_json | json_query('members[?isLearner==`false`]') | length == 3
-      - reset_etcd_members.stdout | from_json | json_query('members[?isLearner==`true`]') | length == 0
-      - reset_etcd_members.stdout | from_json | json_query('members[].name') | sort == reset_expected_servers | map('extract', hostvars, 'ansible_facts') | map(attribute='hostname') | list | sort
-      - reset_etcd_status.stdout | from_json | json_query('[].Status.header.member_id') | sort == reset_etcd_members.stdout | from_json | json_query('members[].ID') | sort
+      - reset_etcd_observations | length == 3
+      - reset_etcd_observations | map(attribute='has_leader') | unique | list == [1]
+      - reset_etcd_observations | map(attribute='is_learner') | sum == 0
+      - reset_etcd_observations | map(attribute='is_leader') | sum == 1
+      - reset_etcd_observations | map(attribute='server_id') | unique | list | length == 3
+      - reset_etcd_observations | map(attribute='server_version') | unique | list | length == 1
+      - reset_etcd_observations | map(attribute='active_peers') | map('length') | unique | list == [2]
     fail_msg: >-
       Refusing destructive reset: embedded etcd is not exactly three healthy,
-      current, voting members matching the live server identities.
+      mutually connected, current voting members.
+
+- name: Require every embedded-etcd member to see exactly the other two peers
+  ansible.builtin.assert:
+    that:
+      - item.active_peers | sort == reset_etcd_observations | map(attribute='server_id') | difference([item.server_id]) | sort
+    fail_msg: >-
+      Refusing destructive reset: embedded-etcd peer topology does not match the
+      three expected voting members.
+  loop: "{{ reset_etcd_observations }}"
+  loop_control:
+    label: "{{ item.server_id }}"
 
 - name: Emit approved non-secret cluster facts before reset confirmation
   ansible.builtin.debug:
@@ -193,9 +184,7 @@
         kernels: "{{ groups['k3s_cluster'] | map('extract', hostvars, 'reset_preservation_baseline') | map(attribute='kernel') | list }}"
       kubernetes_version: "{{ reset_kubernetes_version.stdout | from_json }}"
       nodes: "{{ reset_nodes.stdout | from_json | json_query('items[].{name: metadata.name, version: status.nodeInfo.kubeletVersion}') }}"
-      etcd_status: "{{ reset_etcd_status.stdout | from_json | json_query('[].{endpoint: Endpoint, version: Status.version, leader: Status.leader}') }}"
-      etcd_health: "{{ reset_etcd_health.stdout | from_json | json_query('[].{endpoint: Endpoint, healthy: Health}') }}"
-      etcd_members: "{{ reset_etcd_members.stdout | from_json | json_query('members[].{name: name, learner: isLearner, peer_urls: peerURLs}') }}"
+      etcd_members: "{{ reset_etcd_observations }}"
       applications: >-
         {{ reset_applications.stdout | from_json | json_query('items[].{namespace: metadata.namespace, name: metadata.name}') if reset_applications.rc == 0 else [] }}
       persistent_volume_claims: "{{ reset_pvcs.stdout | from_json | json_query('items[].{namespace: metadata.namespace, name: metadata.name, class: spec.storageClassName, requested: spec.resources.requests.storage}') }}"

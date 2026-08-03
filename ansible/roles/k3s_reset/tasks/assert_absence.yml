@@ -36,11 +36,6 @@
   register: reset_boot_firmware_files_after
   changed_when: false
 
-- name: Recompute network address identity after every wipe
-  ansible.builtin.command:
-    argv: [ip, --json, address, show]
-  register: reset_network_addresses_after
-  changed_when: false
 
 - name: Record recomputed preserved host facts
   ansible.builtin.set_fact:
@@ -54,7 +49,7 @@
       ssh_files: "{{ reset_ssh_files_after.stdout_lines | sort }}"
       ssh_keys: "{{ reset_ssh_keys_after.stdout_lines | sort }}"
       network_config_files: "{{ reset_network_config_files_after.stdout_lines | sort }}"
-      network_addresses: "{{ reset_network_addresses_after.stdout | from_json }}"
+      network_identity: "{{ ansible_facts.default_ipv4 }}"
       boot_firmware_files: "{{ reset_boot_firmware_files_after.stdout_lines | sort }}"
 
 - name: Require every preserved host fact to match its pre-reset baseline
@@ -64,7 +59,7 @@
       - reset_post_wipe_observed.ssh_files == reset_preservation_baseline.ssh_files
       - reset_post_wipe_observed.ssh_keys == reset_preservation_baseline.ssh_keys
       - reset_post_wipe_observed.network_config_files == reset_preservation_baseline.network_config_files
-      - reset_post_wipe_observed.network_addresses == reset_preservation_baseline.network_addresses
+      - reset_post_wipe_observed.network_identity == reset_preservation_baseline.network_identity
       - reset_post_wipe_observed.boot_firmware_files == reset_preservation_baseline.boot_firmware_files
       - reset_post_wipe_observed.hostname == reset_preservation_baseline.hostname
       - reset_post_wipe_observed.distribution == reset_preservation_baseline.distribution

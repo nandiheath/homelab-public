@@ -8,7 +8,6 @@ reset_wipe_role: ""
 
 reset_server_uninstall: /usr/local/bin/k3s-uninstall.sh
 reset_agent_uninstall: /usr/local/bin/k3s-agent-uninstall.sh
-reset_etcdctl: /var/lib/rancher/k3s/data/current/bin/etcdctl
 
 reset_cluster_owned_paths:
   - /etc/rancher/k3s

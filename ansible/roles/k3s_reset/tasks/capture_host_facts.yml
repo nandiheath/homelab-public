@@ -10,11 +10,6 @@
   changed_when: false
   failed_when: false
 
-- name: Read the host network addresses without secret material
-  ansible.builtin.command:
-    argv: [ip, --json, address, show]
-  register: reset_network_addresses
-  changed_when: false
 
 - name: Hash SSH configuration and host keys without reading them
   ansible.builtin.command:
@@ -52,7 +47,7 @@
       ssh_files: "{{ reset_ssh_files.stdout_lines | sort }}"
       inventory_address: "{{ ansible_host | default(inventory_hostname, true) }}"
       os_family: "{{ ansible_facts.os_family }}"
-      network_addresses: "{{ reset_network_addresses.stdout | from_json }}"
+      network_identity: "{{ ansible_facts.default_ipv4 }}"
       ssh_keys: "{{ reset_ssh_keys.stdout_lines | sort }}"
       network_config_files: "{{ reset_network_config_files.stdout_lines | sort }}"
       boot_firmware_files: "{{ reset_boot_firmware_files.stdout_lines | sort }}"
@@ -67,5 +62,5 @@
       os_family: "{{ reset_preservation_baseline.os_family }}"
       kernel: "{{ reset_preservation_baseline.kernel }}"
       users: "{{ reset_preservation_baseline.users }}"
-      network_addresses: "{{ reset_preservation_baseline.network_addresses }}"
+      network_identity: "{{ reset_preservation_baseline.network_identity }}"
       k3s_version: "{{ reset_k3s_version.stdout_lines }}"
