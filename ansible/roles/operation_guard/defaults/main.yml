@@ -1,0 +1,45 @@
+---
+# This role is included from a controller-only authorization play before any
+# play that can become, delegate a mutation, or contact a managed host.
+operation_guard_invocation: direct
+operation_guard_operation: ""
+operation_guard_parent_context: {}
+
+operation_guard_cluster_id: homelab-production
+operation_guard_expected_server_count: 3
+operation_guard_minimum_ansible_version: 2.16.0
+operation_guard_controller_owner: "{{ lookup('ansible.builtin.env', 'USER') }}"
+operation_guard_known_hosts_file: "{{ lookup('ansible.builtin.env', 'HOME') }}/.ssh/known_hosts"
+operation_guard_kubeconfig: ""
+operation_guard_temporary_credential_files: []
+operation_guard_required_controller_tools: []
+
+# Lifecycle playbooks pass these explicitly. They are intentionally empty by
+# default so a missing value cannot accidentally authorize an upgrade.
+operation_guard_source_version: ""
+operation_guard_target_version: ""
+
+operation_guard_kernel_release: 5.15.0-1105-raspi
+operation_guard_expected_k3s_install_version: v1.33.2+k3s1
+operation_guard_expected_k3s_target_version: v1.33.13+k3s1
+operation_guard_expected_k3s_releases:
+  v1.33.2+k3s1:
+    etcd_version: v3.5.21-k3s1
+    arm64_sha256: 1fa4a6a3a11c927902398b3d94a552190fa0e0957de70df38d57d5e5d8a7cde5
+  v1.33.10+k3s1:
+    etcd_version: v3.5.26-k3s1
+    arm64_sha256: b322b8045f38a77123484eb27240cf6dee1c79cbef9b47858298f71eb3c389c1
+  v1.33.13+k3s1:
+    etcd_version: v3.6.12-k3s1
+    arm64_sha256: 007652573124c2e2b581894919d595fed0b7a9b2d54c9eb956d18bc43912f12b
+
+operation_guard_upgrade_paths:
+  v1.33.2+k3s1: v1.33.10+k3s1
+  v1.33.10+k3s1: v1.33.13+k3s1
+
+operation_guard_confirmations:
+  reset: "RESET {{ operation_guard_cluster_id }} AND DESTROY ALL KUBERNETES DATA"
+  kernel_activation: "ACTIVATE KERNEL {{ operation_guard_kernel_release }} ON {{ operation_guard_cluster_id }}"
+  k3s_install: "INSTALL K3S {{ operation_guard_expected_k3s_install_version }} ON {{ operation_guard_cluster_id }}"
+  bootstrap_network: "BOOTSTRAP NETWORK {{ operation_guard_cluster_id }}"
+  bootstrap_gitops: "BOOTSTRAP {{ operation_guard_cluster_id }}"

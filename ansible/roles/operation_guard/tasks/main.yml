@@ -1,0 +1,259 @@
+---
+- name: Validate operation guard inputs before authorization
+  ansible.builtin.assert:
+    that:
+      - operation_guard_invocation is string
+      - operation_guard_invocation in ['direct', 'imported']
+      - operation_guard_operation is string
+      - operation_guard_operation in ((operation_guard_confirmations.keys() | list) + ['k3s_upgrade'])
+      - operation_guard_cluster_id is string
+      - operation_guard_cluster_id == 'homelab-production'
+      - operation_guard_source_version is string
+      - operation_guard_target_version is string
+      - operation_guard_kernel_release is string
+      - operation_guard_controller_owner is string
+      - operation_guard_controller_owner | length > 0
+      - operation_guard_known_hosts_file is string
+      - operation_guard_known_hosts_file | length > 0
+      - operation_guard_kubeconfig is string
+      - operation_guard_temporary_credential_files is sequence
+      - operation_guard_temporary_credential_files is not string
+      - operation_guard_required_controller_tools is sequence
+      - operation_guard_required_controller_tools is not string
+      - cluster_id is defined
+      - cluster_id is string
+      - cluster_id == operation_guard_cluster_id
+      - k3s_install_version is defined
+      - k3s_install_version is string
+      - k3s_install_version == operation_guard_expected_k3s_install_version
+      - k3s_target_version is defined
+      - k3s_target_version is string
+      - k3s_target_version == operation_guard_expected_k3s_target_version
+      - k3s_releases is defined
+      - k3s_releases == operation_guard_expected_k3s_releases
+    fail_msg: >-
+      Refusing lifecycle operation: operation inputs, cluster identity, or pinned
+      K3s release metadata are missing, mistyped, or do not match this lifecycle.
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Validate the required inventory topology
+  ansible.builtin.assert:
+    that:
+      - groups['k3s_cluster'] is defined
+      - groups['server'] is defined
+      - groups['server'] | length == operation_guard_expected_server_count
+      - groups['server'] | difference(groups['k3s_cluster']) | length == 0
+      - groups.get('agent', []) | difference(groups['k3s_cluster']) | length == 0
+      - ((groups['server'] + groups.get('agent', [])) | unique | sort) == (groups['k3s_cluster'] | sort)
+    fail_msg: >-
+      Refusing lifecycle operation: inventory must contain exactly the declared
+      K3s cluster members, including exactly three servers.
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Validate each server identity and pinned SSH host key
+  ansible.builtin.assert:
+    that:
+      - (hostvars[item].ansible_host | default(item, true)) is string
+      - (hostvars[item].ansible_host | default(item, true)) | length > 0
+      - hostvars[item].operation_guard_pinned_ssh_host_key is defined
+      - hostvars[item].operation_guard_pinned_ssh_host_key is string
+      - hostvars[item].operation_guard_pinned_ssh_host_key is match('^(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp(256|384|521)) [A-Za-z0-9+/]+={0,3}( .*)?$')
+      - hostvars[item].ansible_ssh_common_args is not defined or hostvars[item].ansible_ssh_common_args is string
+      - hostvars[item].ansible_ssh_common_args is not defined or hostvars[item].ansible_ssh_common_args is not search('StrictHostKeyChecking=(no|accept-new)')
+      - hostvars[item].ansible_ssh_common_args is not defined or hostvars[item].ansible_ssh_common_args is not search('UserKnownHostsFile=(/dev/null|none)')
+    fail_msg: >-
+      Refusing lifecycle operation: every server must have an address, an exact
+      pinned OpenSSH host key, and no SSH option that weakens host-key checking.
+  loop: "{{ groups['server'] }}"
+  loop_control:
+    label: "{{ item }}"
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Read controller host-key-checking configuration
+  ansible.builtin.set_fact:
+    operation_guard_host_key_checking: "{{ lookup('ansible.builtin.config', 'HOST_KEY_CHECKING') | bool }}"
+  delegate_to: localhost
+  delegate_facts: true
+  become: false
+  run_once: true
+
+- name: Require controller host-key checking
+  ansible.builtin.assert:
+    that:
+      - hostvars['localhost'].operation_guard_host_key_checking | bool
+    fail_msg: Refusing lifecycle operation: Ansible host-key checking is disabled.
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Inspect the controller known-hosts file
+  ansible.builtin.stat:
+    path: "{{ operation_guard_known_hosts_file }}"
+  register: operation_guard_known_hosts
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Require a protected controller known-hosts file
+  ansible.builtin.assert:
+    that:
+      - operation_guard_known_hosts.stat.exists
+      - operation_guard_known_hosts.stat.isreg
+      - operation_guard_known_hosts.stat.pw_name == operation_guard_controller_owner
+      - operation_guard_known_hosts.stat.mode in ['0600', '0644']
+    fail_msg: >-
+      Refusing lifecycle operation: the controller known-hosts file is missing,
+      owned by another user, or has an unsafe mode.
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Find every pinned server host key in controller known-hosts
+  ansible.builtin.command:
+    argv:
+      - ssh-keygen
+      - -F
+      - "{{ hostvars[item].ansible_host | default(item, true) }}"
+      - -f
+      - "{{ operation_guard_known_hosts_file }}"
+  register: operation_guard_known_host_results
+  changed_when: false
+  failed_when: false
+  loop: "{{ groups['server'] }}"
+  loop_control:
+    label: "{{ item }}"
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Require exact host-key pins in controller known-hosts
+  ansible.builtin.assert:
+    that:
+      - operation_guard_known_host_results.results[ansible_loop.index0].rc == 0
+      - hostvars[item].operation_guard_pinned_ssh_host_key in operation_guard_known_host_results.results[ansible_loop.index0].stdout
+    fail_msg: >-
+      Refusing lifecycle operation: controller known-hosts does not contain the
+      exact pinned key for this server.
+  loop: "{{ groups['server'] }}"
+  loop_control:
+    label: "{{ item }}"
+    extended: true
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Require the controller Ansible version
+  ansible.builtin.assert:
+    that:
+      - ansible_version.full is version(operation_guard_minimum_ansible_version, '>=')
+    fail_msg: Refusing lifecycle operation: controller Ansible is below the required version.
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Validate required controller tool definitions
+  ansible.builtin.assert:
+    that:
+      - item is mapping
+      - item.name is defined
+      - item.name is string
+      - item.argv is defined
+      - item.argv is sequence
+      - item.argv is not string
+      - item.argv | length > 0
+      - item.argv | select('string') | list | length == item.argv | length
+      - item.version is defined
+      - item.version is string
+      - item.version | length > 0
+    fail_msg: Refusing lifecycle operation: a required controller tool has an invalid definition.
+  loop: "{{ operation_guard_required_controller_tools }}"
+  loop_control:
+    label: "{{ item.name | default('unnamed') }}"
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Read required controller tool versions
+  ansible.builtin.command:
+    argv: "{{ item.argv }}"
+  register: operation_guard_controller_tool_results
+  changed_when: false
+  failed_when: false
+  loop: "{{ operation_guard_required_controller_tools }}"
+  loop_control:
+    label: "{{ item.name }}"
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Require exact controller tool versions
+  ansible.builtin.assert:
+    that:
+      - operation_guard_controller_tool_results.results[ansible_loop.index0].rc == 0
+      - item.version in operation_guard_controller_tool_results.results[ansible_loop.index0].stdout
+    fail_msg: Refusing lifecycle operation: a required controller tool is unavailable or has the wrong version.
+  loop: "{{ operation_guard_required_controller_tools }}"
+  loop_control:
+    label: "{{ item.name }}"
+    extended: true
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Validate optional controller sensitive-file inputs
+  ansible.builtin.assert:
+    that:
+      - operation_guard_temporary_credential_files | select('string') | list | length == operation_guard_temporary_credential_files | length
+    fail_msg: Refusing lifecycle operation: a controller credential path is not a string.
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Build controller sensitive-file check list
+  ansible.builtin.set_fact:
+    operation_guard_sensitive_files: >-
+      {{ ([operation_guard_kubeconfig] if operation_guard_kubeconfig | length > 0 else []) + operation_guard_temporary_credential_files }}
+  delegate_to: localhost
+  delegate_facts: true
+  become: false
+  run_once: true
+
+- name: Validate controller sensitive-file permissions
+  ansible.builtin.include_tasks: validate_sensitive_file.yml
+  loop: "{{ hostvars['localhost'].operation_guard_sensitive_files }}"
+  loop_control:
+    loop_var: operation_guard_sensitive_file
+    label: "{{ operation_guard_sensitive_file }}"
+  when: hostvars['localhost'].operation_guard_sensitive_files | length > 0
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Validate the requested operation version boundary
+  ansible.builtin.include_tasks: validate_operation.yml
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Build validated parent operation context
+  ansible.builtin.set_fact:
+    operation_guard_validated_context:
+      guard: operation_guard
+      validation_version: 1
+      validated: true
+      operation: "{{ operation_guard_operation }}"
+      cluster_id: "{{ operation_guard_cluster_id }}"
+      source_version: "{{ operation_guard_source_version }}"
+      target_version: "{{ operation_guard_target_version }}"
+      confirmation: "{{ operation_guard_expected_confirmation }}"
+  delegate_to: localhost
+  delegate_facts: true
+  become: false
+  no_log: true
+  run_once: true
