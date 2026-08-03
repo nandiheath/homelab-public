@@ -1,60 +1,65 @@
 ---
-# The only cluster-mutating bootstrap path. Run with private inventory and operator-supplied
-# mode-restricted credential files; CI performs syntax checks only.
-- import_playbook: install.yaml
-
-- name: Bootstrap GitOps after the no-Flannel control plane is available
-  hosts: server[0]
-  become: true
+- name: Bootstrap GitOps only after final bare-cluster upgrade
+  hosts: localhost
+  connection: local
   gather_facts: false
+  become: false
   vars:
-    k3s_kubeconfig: /etc/rancher/k3s/k3s.yaml
+    bootstrap_kubeconfig: "{{ kubeconfig | default('', true) }}"
+    bootstrap_kubectl: "{{ controller_kubectl | default(playbook_dir ~ '/../../bin/kubectl', true) }}"
     public_artifacts_root: "{{ playbook_dir }}/../../artifacts/infrastructure"
+  roles:
+    - role: operation_guard
+      vars:
+        operation_guard_operation: bootstrap_gitops
+        operation_guard_source_version: "{{ k3s_install_version }}"
+        operation_guard_target_version: "{{ k3s_target_version }}"
+        operation_guard_kubeconfig: "{{ bootstrap_kubeconfig }}"
   tasks:
-    - name: Apply Cilium before scheduling dependent controllers
-      ansible.builtin.command:
-        cmd: "k3s kubectl --kubeconfig {{ k3s_kubeconfig }} apply -f {{ public_artifacts_root }}/cilium"
-      changed_when: true
+    - name: Apply GitOps with ephemeral controller credentials
+      block:
+        - name: Create mode-restricted temporary credential files
+          ansible.builtin.tempfile:
+            state: file
+            suffix: .yaml
+          register: bootstrap_credential_files
+          loop: [connect, github-app]
+          no_log: true
 
-    - name: Wait for Cilium readiness
-      ansible.builtin.command:
-        cmd: "k3s kubectl --kubeconfig {{ k3s_kubeconfig }} -n kube-system rollout status daemonset/cilium --timeout=10m"
-      changed_when: false
+        - name: Write temporary credential manifests
+          ansible.builtin.copy:
+            content: "{{ item.content }}"
+            dest: "{{ item.path }}"
+            mode: '0600'
+          loop:
+            - { path: "{{ bootstrap_credential_files.results[0].path }}", content: "{{ connect_credentials_content }}" }
+            - { path: "{{ bootstrap_credential_files.results[1].path }}", content: "{{ github_app_credentials_content }}" }
+          no_log: true
 
-    - name: Apply Argo CD and secret-controller prerequisites
-      ansible.builtin.command:
-        cmd: "k3s kubectl --kubeconfig {{ k3s_kubeconfig }} apply -f {{ item }}"
-      loop:
-        - "{{ public_artifacts_root }}/argocd"
-        - "{{ public_artifacts_root }}/external-secrets"
-        - "{{ public_artifacts_root }}/1password-connect"
-      changed_when: true
+        - name: Apply GitOps controllers from controller
+          ansible.builtin.command:
+            argv: ["{{ bootstrap_kubectl }}", --kubeconfig, "{{ bootstrap_kubeconfig }}", apply, -f, "{{ item }}"]
+          loop:
+            - "{{ public_artifacts_root }}/argocd"
+            - "{{ public_artifacts_root }}/external-secrets"
+            - "{{ public_artifacts_root }}/1password-connect"
+          changed_when: true
 
-    - name: Require operator-supplied runtime credential manifests
-      ansible.builtin.assert:
-        that:
-          - bootstrap_connect_credentials_file is defined
-          - bootstrap_github_app_credentials_file is defined
-        fail_msg: "Provide mode-restricted credential manifest paths through private inventory or extra vars."
+        - name: Apply temporary credentials from controller
+          ansible.builtin.command:
+            argv: ["{{ bootstrap_kubectl }}", --kubeconfig, "{{ bootstrap_kubeconfig }}", apply, -f, "{{ item.path }}"]
+          loop: "{{ bootstrap_credential_files.results }}"
+          changed_when: true
+          no_log: true
 
-    - name: Apply operator-supplied bootstrap credential manifests
-      ansible.builtin.command:
-        cmd: "k3s kubectl --kubeconfig {{ k3s_kubeconfig }} apply -f {{ item }}"
-      loop:
-        - "{{ bootstrap_connect_credentials_file }}"
-        - "{{ bootstrap_github_app_credentials_file }}"
-      changed_when: true
-      no_log: true
-
-    - name: Wait for Argo repository credentials
-      ansible.builtin.command:
-        cmd: >-
-          k3s kubectl --kubeconfig {{ k3s_kubeconfig }} -n argocd wait
-          --for=jsonpath='{.metadata.labels.argocd\.argoproj\.io/secret-type}'=repo-creds
-          secret --all --timeout=5m
-      changed_when: false
-
-    - name: Apply the rendered public root Application
-      ansible.builtin.command:
-        cmd: "k3s kubectl --kubeconfig {{ k3s_kubeconfig }} apply -f {{ public_artifacts_root }}/bootstrap/application_infrastructure-app-of-apps.yml"
-      changed_when: true
+        - name: Apply public root after repository credentials
+          ansible.builtin.command:
+            argv: ["{{ bootstrap_kubectl }}", --kubeconfig, "{{ bootstrap_kubeconfig }}", apply, -f, "{{ public_artifacts_root }}/bootstrap/application_infrastructure-app-of-apps.yml"]
+          changed_when: true
+      always:
+        - name: Remove temporary credential manifests
+          ansible.builtin.file:
+            path: "{{ item.path }}"
+            state: absent
+          loop: "{{ bootstrap_credential_files.results | default([]) }}"
+          no_log: true

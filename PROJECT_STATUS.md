@@ -19,6 +19,7 @@ _Last observed: 2026-08-03_
 - Reset, pinned Raspberry Pi kernel maintenance, and clean K3s install playbooks/roles passed their focused production-profile `ansible-lint` checks and `./scripts/validate.sh` on 2026-08-03. They remain offline-only until HLP-010 fixture coverage and verified production SSH host-key pins exist.
 - The guarded two-step K3s bridge upgrade passed focused production-profile `ansible-lint` and repository validation on 2026-08-03; exact source/target fixture coverage remains an HLP-010 requirement before any live upgrade.
 - Controller-local private Cilium bootstrap and Argo private-source targeting passed focused Ansible lint and repository rendering validation on 2026-08-03; live application remains blocked on verified SSH host-key pins and final fixture coverage.
+- Controller-only GitOps bootstrap passed focused Ansible lint and repository rendering validation on 2026-08-03; it has no installation import and removes controller-temporary credentials in an `always` block.
 
 ## Rollup protocol
 
