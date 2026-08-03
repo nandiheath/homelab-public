@@ -1,7 +1,7 @@
 # HLP-011 — K3s lifecycle operator guide
 
-- Status: planned
-- Owner: unassigned
+- Status: running
+- Owner: Main
 - Depends on: HLP-010
 
 ## Owned paths
