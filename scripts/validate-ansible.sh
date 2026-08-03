@@ -38,7 +38,7 @@ for task_file in tasks/running/*.md; do
   fi
 done
 
-shellcheck scripts/validate-ansible.sh tests/ansible_lifecycle/run-fixtures.sh
+shellcheck scripts/validate-ansible.sh tests/ansible_lifecycle/run-fixtures.sh tests/ansible_lifecycle/run-entrypoints.sh
 ansible-lint ansible/playbooks ansible/roles tests/ansible_lifecycle/operation_guard.yml
 for playbook in ansible/playbooks/*.yaml ansible/playbooks/*.yml; do
   ansible-playbook --syntax-check "$playbook"
@@ -49,4 +49,5 @@ ansible-playbook -i tests/ansible_lifecycle/inventory.yml --syntax-check \
   -e fixture_known_hosts_file=/dev/null
 
 tests/ansible_lifecycle/run-fixtures.sh
+tests/ansible_lifecycle/run-entrypoints.sh
 printf 'Ansible lifecycle validation passed\n'

@@ -10,50 +10,73 @@
       - node_maintenance_servers is sequence
       - node_maintenance_servers is not string
       - node_maintenance_servers | length == 3
+      - node_maintenance_servers | sort == groups['server'] | sort
       - node_maintenance_target in node_maintenance_servers
-      - node_maintenance_mode in ['ordinary', 'bootstrap_cluster']
+      - node_maintenance_mode == 'bootstrap_cluster'
       - node_maintenance_mutation_tasks is sequence
       - node_maintenance_mutation_tasks is not string
+      - node_maintenance_mutation_tasks | length > 0
       - node_maintenance_verify_tasks is sequence
       - node_maintenance_verify_tasks is not string
-      - node_maintenance_mode == 'bootstrap_cluster' or node_maintenance_target != node_maintenance_servers[0]
-    fail_msg: Maintenance transaction input is incomplete or attempts ordinary maintenance on node 0.
+      - node_maintenance_verify_tasks | length > 0
+      - node_maintenance_drain_timeout_seconds | int > 0
+    fail_msg: Maintenance transaction input is incomplete or unsafe.
   delegate_to: localhost
   become: false
 
+- name: Initialize disruptive-state guard
+  ansible.builtin.set_fact:
+    node_maintenance_disrupted: false
+
 - name: Run one-node maintenance transaction
   block:
-    - name: Select a healthy non-target peer
+    - name: Select a healthy non-target peer set
       ansible.builtin.set_fact:
-        node_maintenance_peer: "{{ node_maintenance_servers | reject('equalto', node_maintenance_target) | list | first }}"
+        node_maintenance_peer_candidates: "{{ node_maintenance_servers | reject('equalto', node_maintenance_target) | list }}"
+        node_maintenance_peer: "{{ (node_maintenance_servers | reject('equalto', node_maintenance_target) | list)[0] }}"
       delegate_to: localhost
       delegate_facts: true
       become: false
 
-    - name: Prove the selected peer is Ready before disruption
+    - name: Read all non-target peer state
       ansible.builtin.command:
-        argv: ["{{ node_maintenance_kubectl }}", "--kubeconfig", "{{ node_maintenance_kubeconfig }}", "get", "node", "{{ hostvars['localhost'].node_maintenance_peer }}", "-o", "json"]
+        argv: ["{{ node_maintenance_kubectl }}", "--kubeconfig", "{{ node_maintenance_kubeconfig }}", get, nodes, -o, json]
       register: node_maintenance_peer_state
       changed_when: false
       delegate_to: localhost
       become: false
 
-    - name: Require peer Ready condition
+    - name: Parse non-target peer state
+      ansible.builtin.set_fact:
+        node_maintenance_peer_nodes: >-
+          {{ (node_maintenance_peer_state.stdout | from_json).items
+          | rejectattr('metadata.name', 'equalto', node_maintenance_target) | list }}
+      delegate_to: localhost
+      delegate_facts: true
+      become: false
+
+    - name: Require every non-target peer to be Ready and schedulable
       ansible.builtin.assert:
         that:
-          - node_maintenance_peer_state.stdout | from_json | json_query("status.conditions[?type=='Ready' && status=='True']") | length > 0
-        fail_msg: Refusing disruption because no healthy non-target peer is available.
+          - hostvars['localhost'].node_maintenance_peer_nodes | map(attribute='metadata.name') | list | sort == hostvars['localhost'].node_maintenance_peer_candidates | sort
+          - hostvars['localhost'].node_maintenance_peer_nodes | json_query("[?status.conditions[?type=='Ready' && status=='True']]") | length == 2
+          - hostvars['localhost'].node_maintenance_peer_nodes | selectattr('spec.unschedulable', 'defined') | selectattr('spec.unschedulable') | list | length == 0
+        fail_msg: Refusing disruption because every healthy non-target peer is not Ready and schedulable.
       delegate_to: localhost
       become: false
 
+    - name: Mark target disruptive before cordon
+      ansible.builtin.set_fact:
+        node_maintenance_disrupted: true
+
     - name: Cordon maintenance target
       ansible.builtin.command:
-        argv: ["{{ node_maintenance_kubectl }}", "--kubeconfig", "{{ node_maintenance_kubeconfig }}", "cordon", "{{ node_maintenance_target }}"]
+        argv: ["{{ node_maintenance_kubectl }}", "--kubeconfig", "{{ node_maintenance_kubeconfig }}", cordon, "{{ node_maintenance_target }}"]
       changed_when: true
       delegate_to: localhost
       become: false
 
-    - name: Drain maintenance target through Eviction API
+    - name: Drain maintenance target through the Eviction API
       ansible.builtin.command:
         argv:
           - "{{ node_maintenance_kubectl }}"
@@ -68,39 +91,27 @@
       delegate_to: localhost
       become: false
 
-    - name: Mark disruptive mutation started
-      ansible.builtin.set_fact:
-        node_maintenance_disrupted: true
-
-    - name: Run caller-provided mutation tasks
+    - name: Run caller-provided upgrade mutation tasks
       ansible.builtin.include_tasks: "{{ item }}"
       loop: "{{ node_maintenance_mutation_tasks }}"
 
-    - name: Run caller-provided post-mutation verification tasks
+    - name: Run caller-provided exact post-mutation verification tasks
       ansible.builtin.include_tasks: "{{ item }}"
       loop: "{{ node_maintenance_verify_tasks }}"
 
     - name: Uncordon verified maintenance target
       ansible.builtin.command:
-        argv: ["{{ node_maintenance_kubectl }}", "--kubeconfig", "{{ node_maintenance_kubeconfig }}", "uncordon", "{{ node_maintenance_target }}"]
+        argv: ["{{ node_maintenance_kubectl }}", "--kubeconfig", "{{ node_maintenance_kubeconfig }}", uncordon, "{{ node_maintenance_target }}"]
       changed_when: true
       delegate_to: localhost
       become: false
   rescue:
     - name: Leave disrupted target cordoned
       ansible.builtin.fail:
-        msg: Maintenance failed after disruption; target remains cordoned for repair.
+        msg: Maintenance failed after cordon; target remains cordoned for repair.
       when: node_maintenance_disrupted | default(false)
 
-    - name: Uncordon target only before a disruptive mutation
-      ansible.builtin.command:
-        argv: ["{{ node_maintenance_kubectl }}", "--kubeconfig", "{{ node_maintenance_kubeconfig }}", "uncordon", "{{ node_maintenance_target }}"]
-      changed_when: true
-      delegate_to: localhost
-      become: false
-      when: not (node_maintenance_disrupted | default(false))
-
-    - name: Stop after a pre-mutation maintenance failure
+    - name: Stop after a pre-cordon maintenance failure
       ansible.builtin.fail:
-        msg: Maintenance stopped before a disruptive mutation.
+        msg: Maintenance stopped before the target was cordoned.
       when: not (node_maintenance_disrupted | default(false))

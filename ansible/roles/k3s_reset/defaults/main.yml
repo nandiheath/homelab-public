@@ -21,6 +21,14 @@ reset_cluster_owned_paths:
   - /var/run/cilium
   - /run/flannel
   - /var/run/flannel
+  - /etc/systemd/system/k3s.service
+  - /etc/systemd/system/k3s-agent.service
+  - /etc/systemd/system/k3s.service.env
+  - /etc/systemd/system/k3s-agent.service.env
+  - /usr/local/bin/k3s-killall.sh
+  - /usr/local/bin/k3s
+  - /usr/local/bin/k3s-uninstall.sh
+  - /usr/local/bin/k3s-agent-uninstall.sh
 
 reset_absent_paths:
   - /etc/rancher/k3s
@@ -33,6 +41,11 @@ reset_absent_paths:
   - /var/run/cilium
   - /run/flannel
   - /var/run/flannel
-  - /usr/local/bin/k3s
+  - /etc/systemd/system/k3s.service
+  - /etc/systemd/system/k3s-agent.service
+  - /etc/systemd/system/k3s.service.env
+  - /etc/systemd/system/k3s-agent.service.env
+  - /usr/local/bin/k3s-killall.sh
   - /usr/local/bin/k3s-uninstall.sh
   - /usr/local/bin/k3s-agent-uninstall.sh
+  - /usr/local/bin/k3s

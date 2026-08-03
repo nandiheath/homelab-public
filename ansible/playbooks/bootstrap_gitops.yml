@@ -8,6 +8,16 @@
     bootstrap_kubeconfig: "{{ kubeconfig | default('', true) }}"
     bootstrap_kubectl: "{{ controller_kubectl | default(playbook_dir ~ '/../../bin/kubectl', true) }}"
     public_artifacts_root: "{{ playbook_dir }}/../../artifacts/infrastructure"
+  pre_tasks:
+    - name: Require controller-bound 1Password credential content
+      ansible.builtin.assert:
+        that:
+          - bootstrap_kubeconfig is string
+          - bootstrap_kubeconfig | length > 0
+          - lookup('ansible.builtin.env', 'CONNECT_CREDENTIALS_CONTENT') | length > 0
+          - lookup('ansible.builtin.env', 'GITHUB_APP_CREDENTIALS_CONTENT') | length > 0
+        fail_msg: Credential manifests must be supplied through the controller 1Password environment boundary.
+      no_log: true
   roles:
     - role: operation_guard
       vars:
@@ -28,12 +38,53 @@
 
         - name: Write temporary credential manifests
           ansible.builtin.copy:
-            content: "{{ item.content }}"
+            content: "{{ lookup('ansible.builtin.env', 'CONNECT_CREDENTIALS_CONTENT') if item.kind == 'connect' else lookup('ansible.builtin.env', 'GITHUB_APP_CREDENTIALS_CONTENT') }}"
             dest: "{{ item.path }}"
             mode: '0600'
           loop:
-            - { path: "{{ bootstrap_credential_files.results[0].path }}", content: "{{ connect_credentials_content }}" }
-            - { path: "{{ bootstrap_credential_files.results[1].path }}", content: "{{ github_app_credentials_content }}" }
+            - { kind: connect, path: "{{ bootstrap_credential_files.results[0].path }}" }
+            - { kind: github-app, path: "{{ bootstrap_credential_files.results[1].path }}" }
+          no_log: true
+
+        - name: Read Connect Secret metadata without values
+          ansible.builtin.set_fact:
+            bootstrap_connect_secret_metadata: >-
+              {{
+                (
+                  lookup('ansible.builtin.file', bootstrap_credential_files.results[0].path)
+                  | from_yaml_all
+                  | list
+                )
+                | json_query('[].{kind: kind, name: metadata.name, namespace: metadata.namespace}')
+              }}
+          no_log: true
+
+        - name: Read GitHub App Secret metadata without values
+          ansible.builtin.set_fact:
+            bootstrap_github_secret_metadata: >-
+              {{
+                (
+                  lookup('ansible.builtin.file', bootstrap_credential_files.results[1].path)
+                  | from_yaml_all
+                  | list
+                )
+                | json_query('[].{kind: kind, name: metadata.name, namespace: metadata.namespace, secret_type: metadata.labels."argocd.argoproj.io/secret-type"}')
+              }}
+          no_log: true
+
+        - name: Require expected bootstrap Secret metadata
+          ansible.builtin.assert:
+            that:
+              - bootstrap_connect_secret_metadata | length >= 2
+              - bootstrap_connect_secret_metadata | selectattr('kind', 'equalto', 'Secret') | list | length == bootstrap_connect_secret_metadata | length
+              - bootstrap_connect_secret_metadata | selectattr('name', 'equalto', 'onepassword-connect-token') | selectattr('namespace', 'equalto', 'external-secrets') | list | length == 1
+              - bootstrap_connect_secret_metadata | selectattr('name', 'equalto', 'op-credentials') | selectattr('namespace', 'equalto', '1password') | list | length == 1
+              - bootstrap_github_secret_metadata | length == 1
+              - bootstrap_github_secret_metadata[0].kind == 'Secret'
+              - bootstrap_github_secret_metadata[0].name == 'argocd-github-app'
+              - bootstrap_github_secret_metadata[0].namespace == 'argocd'
+              - bootstrap_github_secret_metadata[0].secret_type == 'repo-creds'
+            fail_msg: Bootstrap credential manifests have unexpected Secret metadata.
           no_log: true
 
         - name: Apply GitOps controllers from controller
@@ -52,14 +103,61 @@
           changed_when: true
           no_log: true
 
-        - name: Apply public root after repository credentials
+        - name: Wait for Argo repository credentials
+          ansible.builtin.command:
+            argv:
+              - "{{ bootstrap_kubectl }}"
+              - --kubeconfig
+              - "{{ bootstrap_kubeconfig }}"
+              - -n
+              - argocd
+              - wait
+              - '--for=jsonpath={.metadata.labels.argocd\.argoproj\.io/secret-type}=repo-creds'
+              - secret/argocd-github-app
+              - --timeout=10m
+          changed_when: false
+
+        - name: Apply public GitOps root after repository credentials
           ansible.builtin.command:
             argv: ["{{ bootstrap_kubectl }}", --kubeconfig, "{{ bootstrap_kubeconfig }}", apply, -f, "{{ public_artifacts_root }}/bootstrap/application_infrastructure-app-of-apps.yml"]
           changed_when: true
+
+        - name: Wait for public GitOps root to be created
+          ansible.builtin.command:
+            argv: ["{{ bootstrap_kubectl }}", --kubeconfig, "{{ bootstrap_kubeconfig }}", -n, argocd, wait, --for=create, application/infrastructure-app-of-apps, --timeout=10m]
+          changed_when: false
+
+        - name: Wait for public GitOps root to be Healthy
+          ansible.builtin.command:
+            argv: ["{{ bootstrap_kubectl }}", --kubeconfig, "{{ bootstrap_kubeconfig }}", -n, argocd, wait, '--for=jsonpath={.status.health.status}=Healthy', application/infrastructure-app-of-apps, --timeout=20m]
+          changed_when: false
+
+        - name: Wait for public GitOps root to be Synced
+          ansible.builtin.command:
+            argv: ["{{ bootstrap_kubectl }}", --kubeconfig, "{{ bootstrap_kubeconfig }}", -n, argocd, wait, '--for=jsonpath={.status.sync.status}=Synced', application/infrastructure-app-of-apps, --timeout=20m]
+          changed_when: false
+
+        - name: Wait for private GitOps root to be created
+          ansible.builtin.command:
+            argv: ["{{ bootstrap_kubectl }}", --kubeconfig, "{{ bootstrap_kubeconfig }}", -n, argocd, wait, --for=create, application/homelab-private, --timeout=20m]
+          changed_when: false
+
+        - name: Wait for private GitOps root to be Healthy
+          ansible.builtin.command:
+            argv: ["{{ bootstrap_kubectl }}", --kubeconfig, "{{ bootstrap_kubeconfig }}", -n, argocd, wait, '--for=jsonpath={.status.health.status}=Healthy', application/homelab-private, --timeout=20m]
+          changed_when: false
+
+        - name: Wait for private GitOps root to be Synced
+          ansible.builtin.command:
+            argv: ["{{ bootstrap_kubectl }}", --kubeconfig, "{{ bootstrap_kubeconfig }}", -n, argocd, wait, '--for=jsonpath={.status.sync.status}=Synced', application/homelab-private, --timeout=20m]
+          changed_when: false
       always:
         - name: Remove temporary credential manifests
           ansible.builtin.file:
             path: "{{ item.path }}"
             state: absent
           loop: "{{ bootstrap_credential_files.results | default([]) }}"
+          loop_control:
+            label: "{{ item.path | default('uncreated') }}"
+          when: item.path is defined
           no_log: true

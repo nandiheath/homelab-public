@@ -21,6 +21,12 @@
     argv: [/usr/bin/find, /etc/ssh, -type, f, -exec, /usr/bin/sha256sum, '{}', '+']
   register: reset_ssh_files
   changed_when: false
+- name: Hash SSH host keys without reading them
+  ansible.builtin.command:
+    argv: [/usr/bin/find, /etc/ssh, -type, f, -name, 'ssh_host_*', -exec, /usr/bin/sha256sum, '{}', '+']
+  register: reset_ssh_keys
+  changed_when: false
+
 
 - name: Hash persistent network configuration without reading it
   ansible.builtin.command:
@@ -44,6 +50,10 @@
       kernel: "{{ ansible_facts.kernel }}"
       users: "{{ ansible_facts.getent_passwd.keys() | list | sort }}"
       ssh_files: "{{ reset_ssh_files.stdout_lines | sort }}"
+      inventory_address: "{{ ansible_host | default(inventory_hostname, true) }}"
+      os_family: "{{ ansible_facts.os_family }}"
+      network_addresses: "{{ reset_network_addresses.stdout | from_json }}"
+      ssh_keys: "{{ reset_ssh_keys.stdout_lines | sort }}"
       network_config_files: "{{ reset_network_config_files.stdout_lines | sort }}"
       boot_firmware_files: "{{ reset_boot_firmware_files.stdout_lines | sort }}"
 
@@ -51,9 +61,11 @@
   ansible.builtin.debug:
     msg:
       host: "{{ inventory_hostname }}"
+      inventory_address: "{{ reset_preservation_baseline.inventory_address }}"
       hostname: "{{ reset_preservation_baseline.hostname }}"
       os: "{{ reset_preservation_baseline.distribution }} {{ reset_preservation_baseline.distribution_version }}"
+      os_family: "{{ reset_preservation_baseline.os_family }}"
       kernel: "{{ reset_preservation_baseline.kernel }}"
       users: "{{ reset_preservation_baseline.users }}"
-      network_addresses: "{{ reset_network_addresses.stdout | from_json }}"
+      network_addresses: "{{ reset_preservation_baseline.network_addresses }}"
       k3s_version: "{{ reset_k3s_version.stdout_lines }}"

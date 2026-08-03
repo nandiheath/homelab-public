@@ -7,10 +7,35 @@
   vars:
     operation_guard_source_version: "{{ upgrade_source_version | default('', true) }}"
     operation_guard_target_version: "{{ upgrade_target_version | default('', true) }}"
+    operation_guard_kubeconfig: "{{ kubeconfig | default('', true) }}"
   roles:
     - role: operation_guard
       vars:
         operation_guard_operation: k3s_upgrade
+
+- name: Prove the uniform source cluster before disruption
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  become: false
+  vars:
+    upgrade_kubeconfig: "{{ kubeconfig | default('', true) }}"
+    upgrade_kubectl: "{{ controller_kubectl | default(playbook_dir ~ '/../../bin/kubectl', true) }}"
+    upgrade_etcdctl: "{{ etcdctl | default('/var/lib/rancher/k3s/data/current/bin/etcdctl', true) }}"
+  roles:
+    - role: cluster_health
+      vars:
+        cluster_health_kubeconfig: "{{ upgrade_kubeconfig }}"
+        cluster_health_kubectl: "{{ upgrade_kubectl }}"
+        cluster_health_expected_servers: "{{ groups['server'] }}"
+        cluster_health_expected_member_names: "{{ groups['server'] }}"
+        cluster_health_expected_unschedulable: []
+        cluster_health_expected_k3s_versions: ["{{ upgrade_source_version }}"]
+        cluster_health_expected_etcd_versions: ["{{ k3s_releases[upgrade_source_version].etcd_version }}"]
+        cluster_health_etcdctl: "{{ upgrade_etcdctl }}"
+        cluster_health_etcd_host: "{{ groups['server'][0] }}"
+        cluster_health_mode: bare_upgrade
+        cluster_health_required_controllers: [cilium]
 
 - name: Upgrade secondary servers before node 0
   hosts: "server[1:]"
@@ -19,17 +44,79 @@
   serial: 1
   any_errors_fatal: true
   vars:
+    upgrade_kubeconfig: "{{ kubeconfig | default('', true) }}"
+    upgrade_kubectl: "{{ controller_kubectl | default(playbook_dir ~ '/../../bin/kubectl', true) }}"
+    upgrade_etcdctl: "{{ etcdctl | default('/var/lib/rancher/k3s/data/current/bin/etcdctl', true) }}"
+    k3s_upgrade_source_version: "{{ upgrade_source_version }}"
     k3s_upgrade_target_version: "{{ upgrade_target_version }}"
+    k3s_upgrade_kubeconfig: "{{ upgrade_kubeconfig }}"
+    k3s_upgrade_kubectl: "{{ upgrade_kubectl }}"
+    k3s_upgrade_etcdctl: "{{ upgrade_etcdctl }}"
+    k3s_upgrade_expected_servers: "{{ groups['server'] }}"
+    k3s_upgrade_expected_member_names: "{{ groups['server'] }}"
+    node_maintenance_kubeconfig: "{{ upgrade_kubeconfig }}"
+    node_maintenance_kubectl: "{{ upgrade_kubectl }}"
+    node_maintenance_target: "{{ inventory_hostname }}"
+    node_maintenance_servers: "{{ groups['server'] }}"
+    node_maintenance_mode: bootstrap_cluster
+    node_maintenance_drain_timeout_seconds: 300
+    node_maintenance_mutation_tasks:
+      - "{{ playbook_dir }}/../roles/k3s_upgrade/tasks/main.yml"
+    node_maintenance_verify_tasks:
+      - "{{ playbook_dir }}/../roles/k3s_upgrade/tasks/verify.yml"
   roles:
-    - role: k3s_upgrade
+    - role: node_maintenance
 
-- name: Upgrade initial server last
+- name: Upgrade initial server last in bootstrap mode
   hosts: "server[0]"
   gather_facts: false
   become: true
   serial: 1
   any_errors_fatal: true
   vars:
+    upgrade_kubeconfig: "{{ kubeconfig | default('', true) }}"
+    upgrade_kubectl: "{{ controller_kubectl | default(playbook_dir ~ '/../../bin/kubectl', true) }}"
+    upgrade_etcdctl: "{{ etcdctl | default('/var/lib/rancher/k3s/data/current/bin/etcdctl', true) }}"
+    k3s_upgrade_source_version: "{{ upgrade_source_version }}"
     k3s_upgrade_target_version: "{{ upgrade_target_version }}"
+    k3s_upgrade_kubeconfig: "{{ upgrade_kubeconfig }}"
+    k3s_upgrade_kubectl: "{{ upgrade_kubectl }}"
+    k3s_upgrade_etcdctl: "{{ upgrade_etcdctl }}"
+    k3s_upgrade_expected_servers: "{{ groups['server'] }}"
+    k3s_upgrade_expected_member_names: "{{ groups['server'] }}"
+    node_maintenance_kubeconfig: "{{ upgrade_kubeconfig }}"
+    node_maintenance_kubectl: "{{ upgrade_kubectl }}"
+    node_maintenance_target: "{{ inventory_hostname }}"
+    node_maintenance_servers: "{{ groups['server'] }}"
+    node_maintenance_mode: bootstrap_cluster
+    node_maintenance_drain_timeout_seconds: 300
+    node_maintenance_mutation_tasks:
+      - "{{ playbook_dir }}/../roles/k3s_upgrade/tasks/main.yml"
+    node_maintenance_verify_tasks:
+      - "{{ playbook_dir }}/../roles/k3s_upgrade/tasks/verify.yml"
   roles:
-    - role: k3s_upgrade
+    - role: node_maintenance
+
+- name: Prove the uniform target cluster after the bridge
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  become: false
+  vars:
+    upgrade_kubeconfig: "{{ kubeconfig | default('', true) }}"
+    upgrade_kubectl: "{{ controller_kubectl | default(playbook_dir ~ '/../../bin/kubectl', true) }}"
+    upgrade_etcdctl: "{{ etcdctl | default('/var/lib/rancher/k3s/data/current/bin/etcdctl', true) }}"
+  roles:
+    - role: cluster_health
+      vars:
+        cluster_health_kubeconfig: "{{ upgrade_kubeconfig }}"
+        cluster_health_kubectl: "{{ upgrade_kubectl }}"
+        cluster_health_expected_servers: "{{ groups['server'] }}"
+        cluster_health_expected_member_names: "{{ groups['server'] }}"
+        cluster_health_expected_unschedulable: []
+        cluster_health_expected_k3s_versions: ["{{ upgrade_target_version }}"]
+        cluster_health_expected_etcd_versions: ["{{ k3s_releases[upgrade_target_version].etcd_version }}"]
+        cluster_health_etcdctl: "{{ upgrade_etcdctl }}"
+        cluster_health_etcd_host: "{{ groups['server'][0] }}"
+        cluster_health_mode: bare_upgrade
+        cluster_health_required_controllers: [cilium]

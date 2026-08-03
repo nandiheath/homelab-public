@@ -5,9 +5,12 @@
       - k3s_install_version is string
       - k3s_releases[k3s_install_version] is defined
       - k3s_install_script_sha256 is match('^[0-9a-f]{64}$')
+      - k3s_releases[k3s_install_version].arm64_sha256 is match('^[0-9a-f]{64}$')
       - k3s_agent_token_file is string
       - k3s_agent_token_file | length > 0
-    fail_msg: Pinned K3s agent installation inputs are incomplete.
+      - k3s_agent_controller_token_file is string
+      - k3s_agent_controller_token_file | length > 0
+    fail_msg: Pinned K3s agent inputs or controller token staging path are incomplete.
 
 - name: Download checksum-pinned K3s installer
   ansible.builtin.get_url:
@@ -18,18 +21,41 @@
     mode: '0700'
     checksum: "sha256:{{ k3s_install_script_sha256 }}"
 
+- name: Verify checksum-pinned installer on agent
+  ansible.builtin.stat:
+    path: /usr/local/lib/k3s-install.sh
+    checksum_algorithm: sha256
+  register: k3s_agent_installer
+
+- name: Require exact installer checksum on agent
+  ansible.builtin.assert:
+    that:
+      - k3s_agent_installer.stat.checksum == k3s_install_script_sha256
+    fail_msg: Installed K3s installer checksum does not match the inventory pin.
+
+- name: Stage root-only agent token file
+  ansible.builtin.copy:
+    src: "{{ k3s_agent_controller_token_file }}"
+    dest: "{{ k3s_agent_token_file }}"
+    owner: root
+    group: root
+    mode: '0600'
+  no_log: true
+
 - name: Require root-only agent token file
   ansible.builtin.stat:
     path: "{{ k3s_agent_token_file }}"
-  register: k3s_agent_token
+  register: k3s_agent_file_stat
+  no_log: true
 
 - name: Assert root-only agent token file
   ansible.builtin.assert:
     that:
-      - k3s_agent_token.stat.exists
-      - k3s_agent_token.stat.pw_name == 'root'
-      - k3s_agent_token.stat.mode == '0600'
+      - k3s_agent_file_stat.stat.exists
+      - k3s_agent_file_stat.stat.pw_name == 'root'
+      - k3s_agent_file_stat.stat.mode == '0600'
     fail_msg: K3s agent token file must be root-owned and mode 0600.
+  no_log: true
 
 - name: Install agent using token file
   ansible.builtin.command:
@@ -37,9 +63,49 @@
       - /usr/local/lib/k3s-install.sh
       - agent
       - --server
-      - "https://{{ api_endpoint }}:6443"
+      - "https://{{ api_endpoint }}:{{ api_port }}"
       - --token-file
       - "{{ k3s_agent_token_file }}"
   environment:
     INSTALL_K3S_VERSION: "{{ k3s_install_version }}"
   no_log: true
+
+- name: Read installed K3s agent binary checksum
+  ansible.builtin.stat:
+    path: /usr/local/bin/k3s
+    checksum_algorithm: sha256
+  register: k3s_agent_binary
+
+- name: Require exact installed K3s agent binary checksum
+  ansible.builtin.assert:
+    that:
+      - k3s_agent_binary.stat.exists
+      - k3s_agent_binary.stat.checksum == k3s_releases[k3s_install_version].arm64_sha256
+    fail_msg: Installed K3s agent binary checksum does not match the pinned release.
+
+- name: Read agent unit arguments without printing them
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - show
+      - k3s-agent.service
+      - --property=ExecStart
+      - --value
+  register: k3s_agent_unit
+  changed_when: false
+  no_log: true
+
+- name: Require agent unit has no plaintext token argument
+  ansible.builtin.assert:
+    that:
+      - "'--token=' not in k3s_agent_unit.stdout"
+      - "'--token ' not in k3s_agent_unit.stdout"
+    fail_msg: K3s agent unit must use a token file and never contain a plaintext token.
+
+- name: Remove token-bearing legacy environment files
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/systemd/system/k3s.service.env
+    - /etc/systemd/system/k3s-agent.service.env

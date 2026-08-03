@@ -6,11 +6,11 @@
 
 | Stage | K3s | embedded etcd |
 |---|---|---|
-| Clean install | `v1.33.2+k3s1` | `v3.5.21-k3s1` |
-| Bridge | `v1.33.10+k3s1` | `v3.5.26-k3s1` |
-| Final | `v1.33.13+k3s1` | `v3.6.12-k3s1` |
+| Clean install and final | `v1.36.2+k3s1` | `v3.6.12-k3s1` |
 
-Direct `v1.33.2+k3s1` to `v1.33.13+k3s1` upgrade is prohibited. Downgrade, partial destructive member rejoin, eviction bypass, and PDB bypass are prohibited.
+The rebuild is a direct clean install; no embedded-etcd bridge or in-place
+K3s upgrade is approved. Downgrade, partial destructive member rejoin,
+eviction bypass, and PDB bypass are prohibited.
 
 Set controller paths once:
 
@@ -49,8 +49,17 @@ cd "$PUBLIC_REPO"
 5. Confirm controller kubeconfig and any credential inputs are controller-owned mode `0600`. Confirm pinned installer, K3s binary, and kernel values match private inventory.
 6. Confirm 1Password access without printing or persisting resolved values.
 7. Capture the playbook's non-secret node, kernel, K3s, etcd, Application, and PVC report. Do not create backup evidence; backup/DR design belongs to deferred HLP-012.
+8. Record the exact public and private repository revisions, controller tool versions, cluster identity `homelab-production`, three healthy current voting etcd members, healthy API/Cilium, and current Application/PVC state in the non-secret handoff. Any mismatch stops before mutation.
 
 Stop before mutation on any inventory/key mismatch, unexpected package state, insufficient boot capacity, degraded API/Cilium/node/etcd state, learner or stale member, checksum mismatch, token exposure, or desired-state drift.
+
+## Authorization boundaries
+
+Reset, kernel activation, clean install, private Cilium bootstrap, and GitOps
+bootstrap are separate mutating phases. Supply the complete exact confirmation
+freshly for each phase; a prior confirmation never authorizes a later phase.
+Missing, boolean, stale-cluster, wrong-version, wrong-source, wrong-target, or
+wrong-text input stops before the phase's mutation transaction.
 
 ## Destructive reset
 
@@ -94,7 +103,7 @@ Only `linux-image-raspi=5.15.0.1105.103` and `linux-raspi=5.15.0.1105.103` may b
 Authorization must be exactly:
 
 ```text
-INSTALL K3S v1.33.2+k3s1 ON homelab-production
+INSTALL K3S v1.36.2+k3s1 ON homelab-production
 ```
 
 Run:
@@ -102,10 +111,16 @@ Run:
 ```bash
 ansible-playbook -i "$INVENTORY" ansible/playbooks/install.yaml \
   -e "kubeconfig=$CONTROLLER_KUBECONFIG" \
-  -e '{"operation_guard_confirmation":"INSTALL K3S v1.33.2+k3s1 ON homelab-production"}'
+  -e '{"operation_guard_confirmation":"INSTALL K3S v1.36.2+k3s1 ON homelab-production"}'
 ```
 
-Require installer and arm64 binary checksum validation. Tokens may exist only in root-owned mode-`0600` token files and must never appear in service arguments, mode-`0644` units, logs, or cached facts. After every serial join require the expected node identity, learner promotion, and healthy member count. Export the controller kubeconfig only after exactly three voting etcd `v3.5.21-k3s1` members are healthy.
+Require installer and arm64 binary checksum validation. Tokens may exist only
+in root-owned mode-`0600` token files and must never appear in service
+arguments, mode-`0644` units, logs, or cached facts. After every serial join
+require the expected node identity, learner promotion, and healthy member
+count. Export the controller kubeconfig only after exactly three voting etcd
+`v3.6.12-k3s1` members are healthy. This source cluster is also the final
+cluster; no upgrade play is authorized.
 
 ## Bootstrap private Cilium
 
@@ -125,51 +140,7 @@ ansible-playbook -i "$INVENTORY" ansible/playbooks/bootstrap_network.yaml \
   -e '{"operation_guard_confirmation":"BOOTSTRAP NETWORK homelab-production"}'
 ```
 
-Require three Ready `v1.33.2+k3s1` nodes, healthy API and private-endpoint Cilium, exactly three voting etcd `v3.5.21-k3s1` members, no token exposure, and zero Argo Applications and PVCs.
-
-## Cross the embedded-etcd bridge
-
-First authorization:
-
-```text
-UPGRADE homelab-production FROM v1.33.2+k3s1 TO v1.33.10+k3s1
-```
-
-Run:
-
-```bash
-ansible-playbook -i "$INVENTORY" ansible/playbooks/upgrade.yaml \
-  -e upgrade_source_version=v1.33.2+k3s1 \
-  -e upgrade_target_version=v1.33.10+k3s1 \
-  -e "kubeconfig=$CONTROLLER_KUBECONFIG" \
-  -e '{"operation_guard_confirmation":"UPGRADE homelab-production FROM v1.33.2+k3s1 TO v1.33.10+k3s1"}'
-```
-
-Require all nodes at `v1.33.10+k3s1`, exactly three voting etcd `v3.5.26-k3s1` members, no learner/stale member, healthy API/nodes/Cilium, and no Application or PVC.
-
-Final authorization:
-
-```text
-UPGRADE homelab-production FROM v1.33.10+k3s1 TO v1.33.13+k3s1
-```
-
-Run:
-
-```bash
-ansible-playbook -i "$INVENTORY" ansible/playbooks/upgrade.yaml \
-  -e upgrade_source_version=v1.33.10+k3s1 \
-  -e upgrade_target_version=v1.33.13+k3s1 \
-  -e "kubeconfig=$CONTROLLER_KUBECONFIG" \
-  -e '{"operation_guard_confirmation":"UPGRADE homelab-production FROM v1.33.10+k3s1 TO v1.33.13+k3s1"}'
-```
-
-Require all nodes at `v1.33.13+k3s1`, exactly three voting etcd `v3.6.12-k3s1` members, no skew or stale member, healthy API/nodes/Cilium, and no Application or PVC.
-
-## Upgrade failure handling
-
-- If quorum and source-version members remain healthy, leave the failed node cordoned, diagnose, and repair forward at the same target.
-- If quorum or datastore health cannot be recovered, run the full guarded reset again with a fresh destructive confirmation. Reinstall `v1.33.2+k3s1` before retrying the first bridge, or `v1.33.10+k3s1` before retrying the final roll. Bootstrap private Cilium and retry the complete roll.
-- Never downgrade an existing datastore, restore an unverified snapshot, or partially wipe/rejoin members around damaged quorum.
+Require three Ready `v1.36.2+k3s1` nodes, healthy API and private-endpoint Cilium, exactly three voting etcd `v3.6.12-k3s1` members, no token exposure, and zero Argo Applications and PVCs. Cilium is pinned to immutable v1.20.0 images and its release documentation records Kubernetes 1.36 compatibility.
 
 ## Bootstrap GitOps
 
@@ -194,7 +165,7 @@ The playbook runs kubectl only on the controller, creates mode-`0600` temporary 
 
 Require all of the following before closing the maintenance window:
 
-- Three Ready nodes at `v1.33.13+k3s1`; three healthy voting etcd `v3.6.12-k3s1` members; no learner, stale member, or version skew.
+- Three Ready nodes at `v1.36.2+k3s1`; three healthy voting etcd `v3.6.12-k3s1` members; no learner, stale member, or version skew.
 - Healthy API and Cilium; Cilium tracks the private artifact and no production resource contains `192.0.2.11`.
 - Argo CD, 1Password Connect, External Secrets, Longhorn, CNPG, ingress, public root, and private root are Healthy; every expected Application is Synced and Healthy; no legacy Argo owner remains.
 - Exactly five newly created Bound PVCs and clean/empty application smoke-test results.

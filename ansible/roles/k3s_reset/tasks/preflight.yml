@@ -12,9 +12,68 @@
       - reset_expected_servers | sort == groups['server'] | sort
       - groups['k3s_cluster'] | sort == (groups['server'] + groups.get('agent', [])) | unique | sort
       - reset_expected_servers | map('extract', hostvars, 'reset_preservation_baseline') | select('defined') | list | length == 3
+      - groups['k3s_cluster'] | map('extract', hostvars, 'reset_preservation_baseline') | select('defined') | list | length == groups['k3s_cluster'] | length
     fail_msg: >-
       Refusing destructive reset: controller inputs, current inventory, or
       captured host identities do not match the approved three-server cluster.
+
+- name: Refresh exact live host identity immediately before reset authorization
+  ansible.builtin.setup:
+    gather_subset:
+      - min
+      - distribution
+      - kernel
+      - network
+  loop: "{{ groups['k3s_cluster'] }}"
+  loop_control:
+    label: "{{ item }}"
+  delegate_to: "{{ item }}"
+  delegate_facts: true
+  become: true
+
+- name: Refresh live user inventory immediately before reset authorization
+  ansible.builtin.getent:
+    database: passwd
+  loop: "{{ groups['k3s_cluster'] }}"
+  loop_control:
+    label: "{{ item }}"
+  delegate_to: "{{ item }}"
+  delegate_facts: true
+  become: true
+
+- name: Read live network addresses immediately before reset authorization
+  ansible.builtin.command:
+    argv: [ip, --json, address, show]
+  loop: "{{ groups['k3s_cluster'] }}"
+  loop_control:
+    label: "{{ item }}"
+  register: reset_preflight_network_addresses
+  changed_when: false
+  delegate_to: "{{ item }}"
+  become: true
+
+- name: Require exact live host identity before accepting reset confirmation
+  ansible.builtin.assert:
+    that:
+      - hostvars[item].ansible_facts.hostname == hostvars[item].reset_preservation_baseline.hostname
+      - hostvars[item].ansible_facts.distribution == hostvars[item].reset_preservation_baseline.distribution
+      - hostvars[item].ansible_facts.distribution_version == hostvars[item].reset_preservation_baseline.distribution_version
+      - hostvars[item].ansible_facts.os_family == hostvars[item].reset_preservation_baseline.os_family
+      - hostvars[item].ansible_facts.kernel == hostvars[item].reset_preservation_baseline.kernel
+      - hostvars[item].ansible_facts.getent_passwd.keys() | list | sort == hostvars[item].reset_preservation_baseline.users
+  loop: "{{ groups['k3s_cluster'] }}"
+  loop_control:
+    label: "{{ item }}"
+
+- name: Require exact live network identity before accepting reset confirmation
+  ansible.builtin.assert:
+    that:
+      - item.rc == 0
+      - (item.stdout | from_json) == hostvars[item.item].reset_preservation_baseline.network_addresses
+      - hostvars[item.item].reset_preservation_baseline.inventory_address in (item.stdout | from_json | json_query('[].addr_info[].local'))
+  loop: "{{ reset_preflight_network_addresses.results }}"
+  loop_control:
+    label: "{{ item.item }}"
 
 - name: Require the populated cluster health gate
   ansible.builtin.include_role:
@@ -61,8 +120,26 @@
       - --key=/var/lib/rancher/k3s/server/tls/etcd/client.key
       - endpoint
       - status
+      - --cluster
       - --write-out=json
   register: reset_etcd_status
+  changed_when: false
+  delegate_to: "{{ reset_expected_servers[0] }}"
+  become: true
+
+- name: Read embedded etcd endpoint health as JSON
+  ansible.builtin.command:
+    argv:
+      - "{{ reset_etcdctl }}"
+      - --endpoints=https://127.0.0.1:2379
+      - --cacert=/var/lib/rancher/k3s/server/tls/etcd/server-ca.crt
+      - --cert=/var/lib/rancher/k3s/server/tls/etcd/client.crt
+      - --key=/var/lib/rancher/k3s/server/tls/etcd/client.key
+      - endpoint
+      - health
+      - --cluster
+      - --write-out=json
+  register: reset_etcd_health
   changed_when: false
   delegate_to: "{{ reset_expected_servers[0] }}"
   become: true
@@ -83,23 +160,34 @@
   delegate_to: "{{ reset_expected_servers[0] }}"
   become: true
 
-- name: Require three current voting embedded etcd members
+- name: Require three healthy current voting embedded etcd members
   ansible.builtin.assert:
     that:
-      - reset_etcd_status.stdout | from_json | length == 1
+      - reset_etcd_status.stdout | from_json | length == 3
+      - reset_etcd_health.stdout | from_json | length == 3
+      - reset_etcd_health.stdout | from_json | selectattr('Health', 'equalto', true) | list | length == 3
+      - reset_etcd_members.stdout | from_json | json_query('members[]') | length == 3
       - reset_etcd_members.stdout | from_json | json_query('members[?isLearner==`false`]') | length == 3
       - reset_etcd_members.stdout | from_json | json_query('members[?isLearner==`true`]') | length == 0
-      - reset_etcd_members.stdout | from_json | json_query('members[].name') | sort == reset_expected_servers | map('extract', hostvars, 'ansible_hostname') | list | sort
+      - reset_etcd_members.stdout | from_json | json_query('members[].name') | sort == reset_expected_servers | map('extract', hostvars, 'ansible_facts') | map(attribute='hostname') | list | sort
+      - reset_etcd_status.stdout | from_json | json_query('[].Status.header.member_id') | sort == reset_etcd_members.stdout | from_json | json_query('members[].ID') | sort
     fail_msg: >-
-      Refusing destructive reset: embedded etcd is not exactly the current
-      three-server, voting membership.
+      Refusing destructive reset: embedded etcd is not exactly three healthy,
+      current, voting members matching the live server identities.
 
-- name: Emit approved non-secret cluster facts before reset
+- name: Emit approved non-secret cluster facts before reset confirmation
   ansible.builtin.debug:
     msg:
+      live_identity:
+        hosts: "{{ groups['k3s_cluster'] }}"
+        addresses: "{{ groups['k3s_cluster'] | map('extract', hostvars, 'reset_preservation_baseline') | map(attribute='inventory_address') | list }}"
+        hostnames: "{{ groups['k3s_cluster'] | map('extract', hostvars, 'reset_preservation_baseline') | map(attribute='hostname') | list }}"
+        os: "{{ groups['k3s_cluster'] | map('extract', hostvars, 'reset_preservation_baseline') | map(attribute='distribution') | list }}"
+        kernels: "{{ groups['k3s_cluster'] | map('extract', hostvars, 'reset_preservation_baseline') | map(attribute='kernel') | list }}"
       kubernetes_version: "{{ reset_kubernetes_version.stdout | from_json }}"
       nodes: "{{ reset_nodes.stdout | from_json | json_query('items[].{name: metadata.name, version: status.nodeInfo.kubeletVersion}') }}"
-      etcd_status: "{{ reset_etcd_status.stdout | from_json }}"
+      etcd_status: "{{ reset_etcd_status.stdout | from_json | json_query('[].{endpoint: Endpoint, version: Status.version, leader: Status.leader}') }}"
+      etcd_health: "{{ reset_etcd_health.stdout | from_json | json_query('[].{endpoint: Endpoint, healthy: Health}') }}"
       etcd_members: "{{ reset_etcd_members.stdout | from_json | json_query('members[].{name: name, learner: isLearner, peer_urls: peerURLs}') }}"
       applications: >-
         {{ reset_applications.stdout | from_json | json_query('items[].{namespace: metadata.namespace, name: metadata.name}') if reset_applications.rc == 0 else [] }}

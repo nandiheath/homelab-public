@@ -5,3 +5,13 @@ api_port: 6443
 cluster_context: homelab
 kubeconfig: "{{ lookup('env', 'HOME') }}/.kube/homelab.config"
 controller_kubectl: "{{ playbook_dir }}/../../bin/kubectl"
+k3s_server_token_file: "/etc/rancher/k3s/token"
+k3s_server_etcdctl: "{{ k3s_server_location }}/data/current/bin/etcdctl"
+k3s_server_etcd_endpoint: "https://127.0.0.1:2379"
+k3s_server_etcd_ca: "{{ k3s_server_location }}/server/tls/etcd/server-ca.crt"
+k3s_server_etcd_cert: "{{ k3s_server_location }}/server/tls/etcd/client.crt"
+k3s_server_etcd_key: "{{ k3s_server_location }}/server/tls/etcd/client.key"
+k3s_server_node_token_file: "{{ k3s_server_location }}/server/node-token"
+k3s_server_api_endpoint: "{{ api_endpoint | default(hostvars[groups['server'][0]].ansible_host | default(groups['server'][0]), true) }}"
+k3s_server_controller_token_file: "{{ hostvars['localhost'].k3s_controller_token_file | default('', true) }}"
+k3s_server_controller_kubeconfig_file: "{{ hostvars['localhost'].k3s_controller_kubeconfig_file | default('', true) }}"

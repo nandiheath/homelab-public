@@ -1,12 +1,32 @@
 ---
-- name: Validate K3s server install inputs
+- name: Validate clean K3s server install inputs
   ansible.builtin.assert:
     that:
+      - groups['server'] | length == 3
       - k3s_install_version is string
       - k3s_releases[k3s_install_version] is defined
       - k3s_install_script_sha256 is match('^[0-9a-f]{64}$')
       - k3s_releases[k3s_install_version].arm64_sha256 is match('^[0-9a-f]{64}$')
-    fail_msg: Pinned K3s server installation inputs are incomplete.
+      - k3s_server_controller_token_file is string
+      - k3s_server_controller_token_file | length > 0
+      - k3s_server_controller_kubeconfig_file is string
+      - k3s_server_controller_kubeconfig_file | length > 0
+      - k3s_server_token_file is string
+      - k3s_server_token_file | length > 0
+      - k3s_server_etcdctl is string
+      - k3s_server_api_endpoint is string
+      - k3s_server_api_endpoint | length > 0
+    fail_msg: Pinned three-server installation inputs or secret staging paths are incomplete.
+
+- name: Derive the expected identity for this ordered server
+  ansible.builtin.set_fact:
+    k3s_server_expected_node_name: "{{ ansible_hostname | default(inventory_hostname) }}"
+    k3s_server_expected_member_names: >-
+      {{ groups['server']
+         | map('extract', hostvars, 'ansible_hostname')
+         | map('default', '')
+         | list }}
+    k3s_server_expected_member_count: "{{ groups['server'].index(inventory_hostname) + 1 }}"
 
 - name: Download checksum-pinned K3s installer
   ansible.builtin.get_url:
@@ -17,30 +37,108 @@
     mode: '0700'
     checksum: "sha256:{{ k3s_install_script_sha256 }}"
 
+- name: Verify checksum-pinned installer on server
+  ansible.builtin.stat:
+    path: /usr/local/lib/k3s-install.sh
+    checksum_algorithm: sha256
+  register: k3s_server_installer
+
+- name: Require exact installer checksum on server
+  ansible.builtin.assert:
+    that:
+      - k3s_server_installer.stat.checksum == k3s_install_script_sha256
+    fail_msg: Installed K3s installer checksum does not match the inventory pin.
+
 - name: Install initial embedded-etcd server
   ansible.builtin.command:
-    argv: [/usr/local/lib/k3s-install.sh, server, --cluster-init]
+    argv:
+      - /usr/local/lib/k3s-install.sh
+      - server
+      - --cluster-init
   environment:
     INSTALL_K3S_VERSION: "{{ k3s_install_version }}"
-  when: inventory_hostname == groups['server'][0]
+  when: groups['server'].index(inventory_hostname) == 0
   no_log: true
 
-- name: Read initial server token without caching it
-  ansible.builtin.slurp:
-    src: /var/lib/rancher/k3s/server/node-token
-  register: k3s_server_initial_token
-  when: inventory_hostname == groups['server'][0]
+- name: Wait for initial server API readiness
+  ansible.builtin.command:
+    argv:
+      - k3s
+      - kubectl
+      - get
+      - --raw=/readyz
+  register: k3s_server_initial_readyz
+  changed_when: false
+  retries: 60
+  delay: 2
+  until: k3s_server_initial_readyz.rc == 0
+  when: groups['server'].index(inventory_hostname) == 0
+
+- name: Fetch initial server kubeconfig to controller staging
+  ansible.builtin.fetch:
+    src: /etc/rancher/k3s/k3s.yaml
+    dest: "{{ k3s_server_controller_kubeconfig_file }}"
+    flat: true
+  when: groups['server'].index(inventory_hostname) == 0
   no_log: true
 
-- name: Write root-only joining token file
+- name: Point health kubeconfig at inventory API endpoint
+  ansible.builtin.command:
+    argv:
+      - "{{ controller_kubectl }}"
+      - --kubeconfig
+      - "{{ k3s_server_controller_kubeconfig_file }}"
+      - config
+      - set-cluster
+      - default
+      - "--server=https://{{ k3s_server_api_endpoint }}:{{ api_port }}"
+  delegate_to: localhost
+  become: false
+  changed_when: true
+  when: groups['server'].index(inventory_hostname) == 0
+  no_log: true
+
+- name: Fetch initial server token to controller staging
+  ansible.builtin.fetch:
+    src: "{{ k3s_server_node_token_file }}"
+    dest: "{{ k3s_server_controller_token_file }}"
+    flat: true
+  when: groups['server'].index(inventory_hostname) == 0
+  no_log: true
+
+- name: Restrict controller token staging
+  ansible.builtin.file:
+    path: "{{ k3s_server_controller_token_file }}"
+    owner: "{{ lookup('env', 'USER') }}"
+    mode: '0600'
+  delegate_to: localhost
+  become: false
+  when: groups['server'].index(inventory_hostname) == 0
+  no_log: true
+
+- name: Stage root-only token file for joining server
   ansible.builtin.copy:
-    content: "{{ hostvars[groups['server'][0]].k3s_server_initial_token.content | b64decode }}"
-    dest: /etc/rancher/k3s/token
+    src: "{{ k3s_server_controller_token_file }}"
+    dest: "{{ k3s_server_token_file }}"
     owner: root
     group: root
     mode: '0600'
-  when: inventory_hostname != groups['server'][0]
+  when: groups['server'].index(inventory_hostname) > 0
   no_log: true
+
+- name: Require root-only joining token file
+  ansible.builtin.stat:
+    path: "{{ k3s_server_token_file }}"
+  register: k3s_server_join_file_stat
+  when: groups['server'].index(inventory_hostname) > 0
+  no_log: true
+
+- name: Assert root-only joining token file
+  ansible.builtin.assert:
+    that:
+      - k3s_server_join_file_stat.stat.exists
+      - k3s_server_join_file_stat.stat.pw_name == 'root'
+      - k3s_server_join_file_stat.stat.mode == '0600'
 
 - name: Install joining embedded-etcd server with token file
   ansible.builtin.command:
@@ -48,13 +146,181 @@
       - /usr/local/lib/k3s-install.sh
       - server
       - --server
-      - "https://{{ hostvars[groups['server'][0]].ansible_host | default(groups['server'][0]) }}:6443"
+      - "https://{{ hostvars[groups['server'][0]].ansible_host | default(groups['server'][0]) }}:{{ api_port }}"
       - --token-file
-      - /etc/rancher/k3s/token
+      - "{{ k3s_server_token_file }}"
   environment:
     INSTALL_K3S_VERSION: "{{ k3s_install_version }}"
-  when: inventory_hostname != groups['server'][0]
+  when: groups['server'].index(inventory_hostname) > 0
   no_log: true
+
+- name: Wait for controller API readiness after this server install
+  ansible.builtin.command:
+    argv:
+      - "{{ controller_kubectl }}"
+      - --kubeconfig
+      - "{{ k3s_server_controller_kubeconfig_file }}"
+      - get
+      - --raw=/readyz
+  delegate_to: localhost
+  become: false
+  register: k3s_server_controller_readyz
+  changed_when: false
+  retries: 60
+  delay: 2
+  until: k3s_server_controller_readyz.rc == 0
+
+- name: Prove exact joined node identity and readiness
+  ansible.builtin.command:
+    argv:
+      - "{{ controller_kubectl }}"
+      - --kubeconfig
+      - "{{ k3s_server_controller_kubeconfig_file }}"
+      - get
+      - node
+      - "{{ k3s_server_expected_node_name }}"
+      - --output=json
+  delegate_to: localhost
+  become: false
+  register: k3s_server_node
+  changed_when: false
+  retries: 30
+  delay: 2
+  until: k3s_server_node.rc == 0
+
+- name: Assert exact joined node identity and readiness
+  ansible.builtin.assert:
+    that:
+      - (k3s_server_node.stdout | from_json).metadata.name == k3s_server_expected_node_name
+      - >-
+        (k3s_server_node.stdout | from_json).status.conditions
+        | selectattr('type', 'equalto', 'Ready')
+        | selectattr('status', 'equalto', 'True')
+        | list | length == 1
+    fail_msg: Installed server did not register as the expected Ready node.
+
+- name: Read embedded-etcd membership before promotion
+  ansible.builtin.command:
+    argv:
+      - "{{ k3s_server_etcdctl }}"
+      - "--endpoints={{ k3s_server_etcd_endpoint }}"
+      - "--cacert={{ k3s_server_etcd_ca }}"
+      - "--cert={{ k3s_server_etcd_cert }}"
+      - "--key={{ k3s_server_etcd_key }}"
+      - member
+      - list
+      - --write-out=json
+  delegate_to: "{{ groups['server'][0] }}"
+  become: true
+  register: k3s_server_members_before_promotion
+  changed_when: false
+  retries: 30
+  delay: 2
+  until:
+    - k3s_server_members_before_promotion.rc == 0
+    - k3s_server_expected_node_name in (k3s_server_members_before_promotion.stdout | from_json | json_query('members[].name'))
+
+- name: Derive joining member identity without exposing token data
+  ansible.builtin.set_fact:
+    k3s_server_joined_member: >-
+      {{ ((k3s_server_members_before_promotion.stdout | from_json).members
+          | selectattr('name', 'equalto', k3s_server_expected_node_name)
+          | list | first) | default({}, true) }}
+
+- name: Require exact member identity before promotion
+  ansible.builtin.assert:
+    that:
+      - k3s_server_joined_member.name == k3s_server_expected_node_name
+      - k3s_server_joined_member.ID is defined
+      - k3s_server_members_before_promotion.stdout | from_json | json_query('members[].name') | sort == k3s_server_expected_member_names[:k3s_server_expected_member_count] | sort
+    fail_msg: Embedded-etcd membership does not match the ordered server identity.
+
+- name: Promote joining embedded-etcd learner
+  ansible.builtin.command:
+    argv:
+      - "{{ k3s_server_etcdctl }}"
+      - "--endpoints={{ k3s_server_etcd_endpoint }}"
+      - "--cacert={{ k3s_server_etcd_ca }}"
+      - "--cert={{ k3s_server_etcd_cert }}"
+      - "--key={{ k3s_server_etcd_key }}"
+      - member
+      - promote
+      - "{{ k3s_server_joined_member.ID }}"
+  delegate_to: "{{ groups['server'][0] }}"
+  become: true
+  register: k3s_server_promotion
+  changed_when: true
+  when:
+    - k3s_server_expected_member_count | int > 1
+    - k3s_server_joined_member.isLearner | bool
+
+- name: Read embedded-etcd membership after promotion
+  ansible.builtin.command:
+    argv:
+      - "{{ k3s_server_etcdctl }}"
+      - "--endpoints={{ k3s_server_etcd_endpoint }}"
+      - "--cacert={{ k3s_server_etcd_ca }}"
+      - "--cert={{ k3s_server_etcd_cert }}"
+      - "--key={{ k3s_server_etcd_key }}"
+      - member
+      - list
+      - --write-out=json
+  delegate_to: "{{ groups['server'][0] }}"
+  become: true
+  register: k3s_server_members
+  changed_when: false
+  retries: 30
+  delay: 2
+  until: k3s_server_members.rc == 0
+
+- name: Read embedded-etcd endpoint status
+  ansible.builtin.command:
+    argv:
+      - "{{ k3s_server_etcdctl }}"
+      - "--endpoints={{ k3s_server_etcd_endpoint }}"
+      - "--cacert={{ k3s_server_etcd_ca }}"
+      - "--cert={{ k3s_server_etcd_cert }}"
+      - "--key={{ k3s_server_etcd_key }}"
+      - endpoint
+      - status
+      - --write-out=json
+  delegate_to: "{{ groups['server'][0] }}"
+  become: true
+  register: k3s_server_etcd_status
+  changed_when: false
+
+- name: Read health for every expected voting member
+  ansible.builtin.command:
+    argv:
+      - "{{ k3s_server_etcdctl }}"
+      - "--endpoints={{ k3s_server_etcd_endpoint }}"
+      - "--cacert={{ k3s_server_etcd_ca }}"
+      - "--cert={{ k3s_server_etcd_cert }}"
+      - "--key={{ k3s_server_etcd_key }}"
+      - endpoint
+      - health
+      - --write-out=json
+  delegate_to: "{{ item }}"
+  become: true
+  loop: "{{ groups['server'][: k3s_server_expected_member_count | int] }}"
+  loop_control:
+    label: "{{ item }}"
+  register: k3s_server_member_health
+  changed_when: false
+  retries: 30
+  delay: 2
+  until: k3s_server_member_health is succeeded
+
+- name: Require exact healthy voting member set
+  ansible.builtin.assert:
+    that:
+      - k3s_server_members.stdout | from_json | json_query('members[].name') | sort == k3s_server_expected_member_names[:k3s_server_expected_member_count] | sort
+      - k3s_server_members.stdout | from_json | json_query('members[?isLearner==`false`]') | length == k3s_server_expected_member_count | int
+      - k3s_server_members.stdout | from_json | json_query('members[?isLearner==`true`]') | length == 0
+      - k3s_server_etcd_status.stdout | from_json | length == 1
+      - k3s_server_member_health.results | length == k3s_server_expected_member_count | int
+      - k3s_server_member_health.results | selectattr('rc', 'equalto', 0) | list | length == k3s_server_expected_member_count | int
+    fail_msg: Embedded-etcd is not exactly the expected healthy voting membership.
 
 - name: Read installed K3s binary checksum
   ansible.builtin.stat:
@@ -64,8 +330,29 @@
 
 - name: Require exact installed K3s binary checksum
   ansible.builtin.assert:
-    that: k3s_server_binary.stat.checksum == k3s_releases[k3s_install_version].arm64_sha256
+    that:
+      - k3s_server_binary.stat.exists
+      - k3s_server_binary.stat.checksum == k3s_releases[k3s_install_version].arm64_sha256
     fail_msg: Installed K3s binary checksum does not match the pinned release.
+
+- name: Read server unit arguments without printing them
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - show
+      - k3s.service
+      - --property=ExecStart
+      - --value
+  register: k3s_server_unit
+  changed_when: false
+  no_log: true
+
+- name: Require server unit has no plaintext token argument
+  ansible.builtin.assert:
+    that:
+      - "'--token=' not in k3s_server_unit.stdout"
+      - "'--token ' not in k3s_server_unit.stdout"
+    fail_msg: K3s server unit must use token files and never contain a plaintext token.
 
 - name: Remove token-bearing legacy environment files
   ansible.builtin.file:

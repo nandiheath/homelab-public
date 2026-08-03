@@ -3,3 +3,4 @@ raspi_kernel_packages: []
 raspi_kernel_release: 5.15.0-1105-raspi
 raspi_kernel_mode: cluster_absent
 raspi_kernel_boot_path: /boot/firmware
+raspi_kernel_fallback_release: 5.15.0-1102-raspi

@@ -16,3 +16,19 @@
   when: reset_kubeconfig | length > 0
   delegate_to: localhost
   become: false
+
+- name: Verify controller kubeconfig is absent after complete reset
+  ansible.builtin.stat:
+    path: "{{ reset_kubeconfig }}"
+  register: reset_kubeconfig_stat
+  when: reset_kubeconfig | length > 0
+  delegate_to: localhost
+  become: false
+
+- name: Require controller kubeconfig absent after complete reset
+  ansible.builtin.assert:
+    that: not reset_kubeconfig_stat.stat.exists
+    fail_msg: Controller kubeconfig remains after complete reset.
+  when: reset_kubeconfig | length > 0
+  delegate_to: localhost
+  become: false

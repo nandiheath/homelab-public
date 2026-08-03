@@ -1,2 +1,11 @@
 ---
 systemd_dir: /etc/systemd/system
+k3s_upgrade_source_version: ""
+k3s_upgrade_target_version: ""
+k3s_upgrade_kubeconfig: ""
+k3s_upgrade_kubectl: kubectl
+k3s_upgrade_expected_servers: []
+k3s_upgrade_expected_member_names: []
+k3s_upgrade_expected_unschedulable: []
+k3s_upgrade_drain_timeout_seconds: 300
+k3s_upgrade_etcdctl: /var/lib/rancher/k3s/data/current/bin/etcdctl

@@ -13,21 +13,147 @@
 
 - name: Install clean embedded-etcd servers one at a time
   hosts: server
-  gather_facts: false
+  gather_facts: true
   become: true
   serial: 1
   any_errors_fatal: true
-  roles:
-    - role: k3s_server
+  pre_tasks:
+    - name: Require the documented three-server install shape
+      ansible.builtin.assert:
+        that:
+          - groups['server'] | length == 3
+          - groups['server'] | unique | length == 3
+        fail_msg: Clean install requires exactly three ordered server hosts.
+    - name: Gather exact server identities before serial installation
+      ansible.builtin.setup:
+        gather_subset:
+          - min
+      delegate_to: "{{ item }}"
+      delegate_facts: true
+      loop: "{{ groups['server'] }}"
+      loop_control:
+        label: "{{ item }}"
+      when: inventory_hostname == groups['server'][0]
 
-- name: Install agents only after servers are healthy
+    - name: Create controller token staging file
+      ansible.builtin.tempfile:
+        state: file
+        prefix: homelab-k3s-token-
+        suffix: .tmp
+      delegate_to: localhost
+      become: false
+      when: inventory_hostname == groups['server'][0]
+      register: k3s_controller_secret_temp
+
+    - name: Create controller health kubeconfig staging file
+      ansible.builtin.tempfile:
+        state: file
+        prefix: homelab-k3s-health-
+        suffix: .yaml
+      delegate_to: localhost
+      become: false
+      when: inventory_hostname == groups['server'][0]
+      register: k3s_controller_kubeconfig_temp
+
+    - name: Publish non-secret staging paths to localhost facts
+      ansible.builtin.set_fact:
+        k3s_controller_token_file: "{{ k3s_controller_secret_temp.path }}"
+        k3s_controller_kubeconfig_file: "{{ k3s_controller_kubeconfig_temp.path }}"
+      delegate_to: localhost
+      delegate_facts: true
+      become: false
+      when: inventory_hostname == groups['server'][0]
+
+    - name: Restrict controller staging files
+      ansible.builtin.file:
+        path: "{{ item }}"
+        owner: "{{ lookup('env', 'USER') }}"
+        mode: '0600'
+      loop:
+        - "{{ k3s_controller_secret_temp.path }}"
+        - "{{ k3s_controller_kubeconfig_temp.path }}"
+      delegate_to: localhost
+      become: false
+      when: inventory_hostname == groups['server'][0]
+  tasks:
+    - name: Install server role and remove staging on failure
+      block:
+        - name: Install and verify one embedded-etcd server
+          ansible.builtin.include_role:
+            name: k3s_server
+      rescue:
+        - name: Remove controller token staging after failed server install
+          ansible.builtin.file:
+            path: "{{ hostvars['localhost'].k3s_controller_token_file }}"
+            state: absent
+          delegate_to: localhost
+          become: false
+          no_log: true
+
+        - name: Remove controller kubeconfig staging after failed server install
+          ansible.builtin.file:
+            path: "{{ hostvars['localhost'].k3s_controller_kubeconfig_file }}"
+            state: absent
+          delegate_to: localhost
+          become: false
+          no_log: true
+
+        - name: Stop after failed server install
+          ansible.builtin.fail:
+            msg: Clean embedded-etcd server installation failed; controller staging was removed.
+
+- name: Install optional agents only after all servers are healthy
   hosts: agent
-  gather_facts: false
+  gather_facts: true
   become: true
   serial: 1
   any_errors_fatal: true
-  roles:
-    - role: k3s_agent
+  tasks:
+    - name: Install agent role and remove staging on failure
+      block:
+        - name: Install and verify one K3s agent
+          ansible.builtin.include_role:
+            name: k3s_agent
+      rescue:
+        - name: Remove controller token staging after failed agent install
+          ansible.builtin.file:
+            path: "{{ hostvars['localhost'].k3s_controller_token_file }}"
+            state: absent
+          delegate_to: localhost
+          become: false
+          no_log: true
+
+        - name: Remove controller kubeconfig staging after failed agent install
+          ansible.builtin.file:
+            path: "{{ hostvars['localhost'].k3s_controller_kubeconfig_file }}"
+            state: absent
+          delegate_to: localhost
+          become: false
+          no_log: true
+
+        - name: Stop after failed agent install
+          ansible.builtin.fail:
+            msg: Optional K3s agent installation failed; controller staging was removed.
+
+- name: Remove controller-only install staging
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  become: false
+  tasks:
+    - name: Remove controller token staging after all installs
+      ansible.builtin.file:
+        path: "{{ k3s_controller_token_file }}"
+        state: absent
+      when: k3s_controller_token_file is defined
+      no_log: true
+
+    - name: Remove controller health kubeconfig staging after all installs
+      ansible.builtin.file:
+        path: "{{ k3s_controller_kubeconfig_file }}"
+        state: absent
+      when: k3s_controller_kubeconfig_file is defined
+      no_log: true
 
 - name: Export kubeconfig after full server membership
   hosts: server[0]

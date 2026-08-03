@@ -71,13 +71,11 @@ expect_reject() {
 }
 
 operations=(
-  'reset|v1.33.2+k3s1|v1.33.13+k3s1|RESET homelab-production AND DESTROY ALL KUBERNETES DATA'
-  'kernel_activation|v1.33.2+k3s1|v1.33.13+k3s1|ACTIVATE KERNEL 5.15.0-1105-raspi ON homelab-production'
-  'k3s_install|v1.33.2+k3s1|v1.33.2+k3s1|INSTALL K3S v1.33.2+k3s1 ON homelab-production'
-  'bootstrap_network|v1.33.2+k3s1|v1.33.13+k3s1|BOOTSTRAP NETWORK homelab-production'
-  'bootstrap_gitops|v1.33.13+k3s1|v1.33.13+k3s1|BOOTSTRAP homelab-production'
-  'k3s_upgrade|v1.33.2+k3s1|v1.33.10+k3s1|UPGRADE homelab-production FROM v1.33.2+k3s1 TO v1.33.10+k3s1'
-  'k3s_upgrade|v1.33.10+k3s1|v1.33.13+k3s1|UPGRADE homelab-production FROM v1.33.10+k3s1 TO v1.33.13+k3s1'
+  'reset|v1.36.2+k3s1|v1.36.2+k3s1|RESET homelab-production AND DESTROY ALL KUBERNETES DATA'
+  'kernel_activation|v1.36.2+k3s1|v1.36.2+k3s1|ACTIVATE KERNEL 5.15.0-1105-raspi ON homelab-production'
+  'k3s_install|v1.36.2+k3s1|v1.36.2+k3s1|INSTALL K3S v1.36.2+k3s1 ON homelab-production'
+  'bootstrap_network|v1.36.2+k3s1|v1.36.2+k3s1|BOOTSTRAP NETWORK homelab-production'
+  'bootstrap_gitops|v1.36.2+k3s1|v1.36.2+k3s1|BOOTSTRAP homelab-production'
 )
 
 for fixture_case in "${operations[@]}"; do
@@ -89,9 +87,8 @@ for fixture_case in "${operations[@]}"; do
   expect_reject "$operation wrong authorization" "$operation" "$source" "$target" 'NOT AUTHORIZED'
 done
 
-expect_reject 'first bridge wrong source' k3s_upgrade v1.33.1+k3s1 v1.33.10+k3s1 'UPGRADE homelab-production FROM v1.33.1+k3s1 TO v1.33.10+k3s1'
-expect_reject 'first bridge wrong target' k3s_upgrade v1.33.2+k3s1 v1.33.13+k3s1 'UPGRADE homelab-production FROM v1.33.2+k3s1 TO v1.33.13+k3s1'
-expect_reject 'second bridge wrong source' k3s_upgrade v1.33.9+k3s1 v1.33.13+k3s1 'UPGRADE homelab-production FROM v1.33.9+k3s1 TO v1.33.13+k3s1'
-expect_reject 'second bridge wrong target' k3s_upgrade v1.33.10+k3s1 v1.34.0+k3s1 'UPGRADE homelab-production FROM v1.33.10+k3s1 TO v1.34.0+k3s1'
+expect_reject 'direct install wrong source' k3s_install v1.36.1+k3s1 v1.36.1+k3s1 'INSTALL K3S v1.36.1+k3s1 ON homelab-production'
+expect_reject 'direct install wrong target' k3s_install v1.36.3+k3s1 v1.36.3+k3s1 'INSTALL K3S v1.36.3+k3s1 ON homelab-production'
+expect_reject 'upgrade path disabled' k3s_upgrade v1.36.2+k3s1 v1.36.2+k3s1 'UPGRADE homelab-production FROM v1.36.2+k3s1 TO v1.36.2+k3s1'
 
 printf 'Ansible lifecycle authorization fixtures passed\n'

@@ -5,6 +5,7 @@ metadata:
   labels:
     app.kubernetes.io/name: cilium-operator
     app.kubernetes.io/part-of: cilium
+    helm.sh/chart: cilium-1.20.0
     io.cilium/app: operator
     name: cilium-operator
   name: cilium-operator
@@ -28,6 +29,7 @@ spec:
       labels:
         app.kubernetes.io/name: cilium-operator
         app.kubernetes.io/part-of: cilium
+        helm.sh/chart: cilium-1.20.0
         io.cilium/app: operator
         name: cilium-operator
     spec:
@@ -66,19 +68,22 @@ spec:
               value: 192.0.2.11
             - name: KUBERNETES_SERVICE_PORT
               value: "6443"
-          image: quay.io/cilium/operator-generic:v1.18.0@sha256:398378b4507b6e9db22be2f4455d8f8e509b189470061b0f813f0fabaf944f51
+          image: quay.io/cilium/operator-generic:v1.20.0@sha256:80744a8cc7c91c2f9e6347629406844eb35d79b30a732c6d41c15b17232a74f3
           imagePullPolicy: IfNotPresent
           livenessProbe:
             httpGet:
               host: 127.0.0.1
               path: /healthz
-              port: 9234
+              port: health
               scheme: HTTP
             initialDelaySeconds: 60
             periodSeconds: 10
             timeoutSeconds: 3
           name: cilium-operator
           ports:
+            - containerPort: 9234
+              hostPort: 9234
+              name: health
             - containerPort: 9963
               hostPort: 9963
               name: prometheus
@@ -88,7 +93,7 @@ spec:
             httpGet:
               host: 127.0.0.1
               path: /healthz
-              port: 9234
+              port: health
               scheme: HTTP
             initialDelaySeconds: 0
             periodSeconds: 5
@@ -104,6 +109,7 @@ spec:
               name: cilium-config-path
               readOnly: true
       hostNetwork: true
+      hostUsers: true
       nodeSelector:
         kubernetes.io/os: linux
       priorityClassName: system-cluster-critical
@@ -118,6 +124,8 @@ spec:
         - key: node-role.kubernetes.io/master
           operator: Exists
         - key: node.kubernetes.io/not-ready
+          operator: Exists
+        - key: node.cloudprovider.kubernetes.io/uninitialized
           operator: Exists
         - key: node.cilium.io/agent-not-ready
           operator: Exists

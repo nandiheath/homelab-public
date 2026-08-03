@@ -6,7 +6,10 @@ helmCharts:
     repo: https://helm.cilium.io/
     releaseName: cilium
     namespace: kube-system
-    version: 1.18.0
+    # Cilium 1.20.0 is an immutable release. Its release notes document
+    # Kubernetes 1.36 updates and publish the image manifest digests below.
+    # https://github.com/cilium/cilium/releases/tag/v1.20.0
+    version: 1.20.0
     valuesInline:
       # Supplied by the operator's private inventory during bootstrap.
       k8sServiceHost: 192.0.2.11
@@ -14,6 +17,23 @@ helmCharts:
       kubeProxyReplacement: true
       socketLB:
         hostNamespaceOnly: true
+      image:
+        repository: quay.io/cilium/cilium
+        tag: v1.20.0
+        digest: sha256:383968cd5e8873f7976fa76aa6196045643558f4cc9518a207b9335cb24a0e93
+        useDigest: true
+      operator:
+        image:
+          repository: quay.io/cilium/operator
+          tag: v1.20.0
+          genericDigest: sha256:80744a8cc7c91c2f9e6347629406844eb35d79b30a732c6d41c15b17232a74f3
+          useDigest: true
+      envoy:
+        image:
+          repository: quay.io/cilium/cilium-envoy
+          tag: v1.37.5-1782911245-7cffc778c923f68a77954a53b1a98d6b5353f004
+          digest: sha256:583057dd4f7d54cd41efff3c413aa0b148ac201f522e2c3336851fa89c78b039
+          useDigest: true
       # avoid configuration conflicts with istio ambient mode
       # https://docs.cilium.io/en/latest/network/servicemesh/istio/
       cni:
@@ -25,10 +45,9 @@ helmCharts:
             certValidityDuration: 1095
             certManagerIssuerRef:
               group: cert-manager.io
-              kind: ClusterIssuer                
+              kind: ClusterIssuer
               name: selfsigned
       ipam:
         operator:
           clusterPoolIPv4PodCIDRList:
             - "10.244.0.0/16"
-            
