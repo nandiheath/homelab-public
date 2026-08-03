@@ -11,6 +11,38 @@
         name: k3s_reset
         tasks_from: capture_host_facts
 
+- name: Validate interrupted-reset recovery eligibility
+  hosts: server
+  gather_facts: false
+  become: false
+  any_errors_fatal: true
+  tasks:
+    - name: Require an explicit boolean recovery selector
+      ansible.builtin.assert:
+        that:
+          - reset_recovery is not defined or reset_recovery is boolean
+        fail_msg: >-
+          Refusing reset: reset_recovery must be an explicit boolean when supplied.
+
+    - name: Inspect K3s installation paths before recovery
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /usr/local/bin/k3s
+        - /usr/local/bin/k3s-uninstall.sh
+        - /usr/local/bin/k3s-agent-uninstall.sh
+        - /var/lib/rancher/k3s
+      register: reset_recovery_installation_paths
+      when: reset_recovery | default(false)
+
+    - name: Require the generated K3s uninstall to have completed before recovery
+      ansible.builtin.assert:
+        that:
+          - reset_recovery_installation_paths.results | selectattr('stat.exists') | list | length == 0
+        fail_msg: >-
+          Refusing reset recovery: a K3s binary, generated uninstall entrypoint,
+          or primary state directory still exists. Run the normal guarded reset.
+      when: reset_recovery | default(false)
 - name: Recheck the live cluster immediately before reset authorization
   hosts: localhost
   gather_facts: false
@@ -23,6 +55,7 @@
       ansible.builtin.include_role:
         name: k3s_reset
         tasks_from: preflight
+      when: not (reset_recovery | default(false))
 
 - name: Authorize the destructive K3s reset
   hosts: localhost
