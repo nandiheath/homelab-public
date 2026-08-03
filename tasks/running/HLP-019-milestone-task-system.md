@@ -1,7 +1,7 @@
 # HLP-019 — Adopt milestone-based task planning
 
-- Status: planned
-- Owner: unassigned
+- Status: running
+- Owner: Main
 - Depends on: none
 
 ## Owned paths
