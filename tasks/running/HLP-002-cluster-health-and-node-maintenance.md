@@ -1,7 +1,7 @@
 # HLP-002 — Cluster health and node maintenance
 
-- Status: planned
-- Owner: unassigned
+- Status: running
+- Owner: ClusterHealthMaintenance
 - Depends on: HLP-001
 
 ## Owned paths
