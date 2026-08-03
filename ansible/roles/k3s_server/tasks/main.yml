@@ -13,7 +13,6 @@
       - k3s_server_controller_kubeconfig_file | length > 0
       - k3s_server_token_file is string
       - k3s_server_token_file | length > 0
-      - k3s_server_etcdctl is string
       - k3s_server_api_endpoint is string
       - k3s_server_api_endpoint | length > 0
     fail_msg: Pinned three-server installation inputs or secret staging paths are incomplete.
@@ -26,6 +25,10 @@
          | map('extract', hostvars, 'ansible_hostname')
          | map('default', '')
          | list }}
+    k3s_server_expected_etcd_version: >-
+      {{ k3s_releases[k3s_install_version].etcd_version
+         | regex_replace('^v', '')
+         | regex_replace('-k3s[0-9]+$', '') }}
     k3s_server_expected_member_count: "{{ groups['server'].index(inventory_hostname) + 1 }}"
 
 - name: Download checksum-pinned K3s installer
@@ -116,6 +119,15 @@
   when: groups['server'].index(inventory_hostname) == 0
   no_log: true
 
+- name: Create root-only K3s configuration directory for joining server
+  ansible.builtin.file:
+    path: "{{ k3s_server_token_file | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+  when: groups['server'].index(inventory_hostname) > 0
+
 - name: Stage root-only token file for joining server
   ansible.builtin.copy:
     src: "{{ k3s_server_controller_token_file }}"
@@ -139,6 +151,7 @@
       - k3s_server_join_file_stat.stat.exists
       - k3s_server_join_file_stat.stat.pw_name == 'root'
       - k3s_server_join_file_stat.stat.mode == '0600'
+  when: groups['server'].index(inventory_hostname) > 0
 
 - name: Install joining embedded-etcd server with token file
   ansible.builtin.command:
@@ -186,7 +199,15 @@
   changed_when: false
   retries: 30
   delay: 2
-  until: k3s_server_node.rc == 0
+  until: >-
+    k3s_server_node.rc == 0
+    and (k3s_server_node.stdout | from_json).metadata.name == k3s_server_expected_node_name
+    and (
+      (k3s_server_node.stdout | from_json).status.conditions
+      | selectattr('type', 'equalto', 'Ready')
+      | selectattr('status', 'equalto', 'True')
+      | list | length
+    ) == 1
 
 - name: Assert exact joined node identity and readiness
   ansible.builtin.assert:
@@ -199,128 +220,122 @@
         | list | length == 1
     fail_msg: Installed server did not register as the expected Ready node.
 
-- name: Read embedded-etcd membership before promotion
+- name: Read exact Kubernetes node set after this server install
   ansible.builtin.command:
     argv:
-      - "{{ k3s_server_etcdctl }}"
-      - "--endpoints={{ k3s_server_etcd_endpoint }}"
-      - "--cacert={{ k3s_server_etcd_ca }}"
-      - "--cert={{ k3s_server_etcd_cert }}"
-      - "--key={{ k3s_server_etcd_key }}"
-      - member
-      - list
-      - --write-out=json
-  delegate_to: "{{ groups['server'][0] }}"
-  become: true
-  register: k3s_server_members_before_promotion
+      - "{{ controller_kubectl }}"
+      - --kubeconfig
+      - "{{ k3s_server_controller_kubeconfig_file }}"
+      - get
+      - nodes
+      - --output=json
+  delegate_to: localhost
+  become: false
+  register: k3s_server_nodes
   changed_when: false
-  retries: 30
-  delay: 2
-  until:
-    - k3s_server_members_before_promotion.rc == 0
-    - k3s_server_expected_node_name in (k3s_server_members_before_promotion.stdout | from_json | json_query('members[].name'))
 
-- name: Derive joining member identity without exposing token data
+- name: Count the observed ordered Kubernetes members
   ansible.builtin.set_fact:
-    k3s_server_joined_member: >-
-      {{ ((k3s_server_members_before_promotion.stdout | from_json).members
-          | selectattr('name', 'equalto', k3s_server_expected_node_name)
-          | list | first) | default({}, true) }}
+    k3s_server_observed_member_count: >-
+      {{ (k3s_server_nodes.stdout | from_json)['items'] | length }}
 
-- name: Require exact member identity before promotion
+- name: Require exact ordered Kubernetes node set
   ansible.builtin.assert:
     that:
-      - k3s_server_joined_member.name == k3s_server_expected_node_name
-      - k3s_server_joined_member.ID is defined
-      - k3s_server_members_before_promotion.stdout | from_json | json_query('members[].name') | sort == k3s_server_expected_member_names[:k3s_server_expected_member_count] | sort
-    fail_msg: Embedded-etcd membership does not match the ordered server identity.
+      - k3s_server_observed_member_count | int >= k3s_server_expected_member_count | int
+      - k3s_server_observed_member_count | int <= groups['server'] | length
+      - >-
+        (k3s_server_nodes.stdout | from_json)['items']
+        | map(attribute='metadata.name') | sort
+        == k3s_server_expected_member_names[:k3s_server_observed_member_count | int] | sort
+    fail_msg: Kubernetes nodes do not match the ordered server installation.
 
-- name: Promote joining embedded-etcd learner
+- name: Read local embedded-etcd health metrics from every installed server
   ansible.builtin.command:
     argv:
-      - "{{ k3s_server_etcdctl }}"
-      - "--endpoints={{ k3s_server_etcd_endpoint }}"
-      - "--cacert={{ k3s_server_etcd_ca }}"
-      - "--cert={{ k3s_server_etcd_cert }}"
-      - "--key={{ k3s_server_etcd_key }}"
-      - member
-      - promote
-      - "{{ k3s_server_joined_member.ID }}"
-  delegate_to: "{{ groups['server'][0] }}"
-  become: true
-  register: k3s_server_promotion
-  changed_when: true
-  when:
-    - k3s_server_expected_member_count | int > 1
-    - k3s_server_joined_member.isLearner | bool
+      - /usr/bin/python3
+      - -c
+      - |
+        import json
+        import urllib.request
 
-- name: Read embedded-etcd membership after promotion
-  ansible.builtin.command:
-    argv:
-      - "{{ k3s_server_etcdctl }}"
-      - "--endpoints={{ k3s_server_etcd_endpoint }}"
-      - "--cacert={{ k3s_server_etcd_ca }}"
-      - "--cert={{ k3s_server_etcd_cert }}"
-      - "--key={{ k3s_server_etcd_key }}"
-      - member
-      - list
-      - --write-out=json
-  delegate_to: "{{ groups['server'][0] }}"
-  become: true
-  register: k3s_server_members
-  changed_when: false
-  retries: 30
-  delay: 2
-  until: k3s_server_members.rc == 0
+        lines = urllib.request.urlopen(
+            "http://127.0.0.1:2381/metrics", timeout=10
+        ).read().decode().splitlines()
 
-- name: Read embedded-etcd endpoint status
-  ansible.builtin.command:
-    argv:
-      - "{{ k3s_server_etcdctl }}"
-      - "--endpoints={{ k3s_server_etcd_endpoint }}"
-      - "--cacert={{ k3s_server_etcd_ca }}"
-      - "--cert={{ k3s_server_etcd_cert }}"
-      - "--key={{ k3s_server_etcd_key }}"
-      - endpoint
-      - status
-      - --write-out=json
-  delegate_to: "{{ groups['server'][0] }}"
-  become: true
-  register: k3s_server_etcd_status
-  changed_when: false
+        def metric_value(name):
+            matches = [line for line in lines if line.startswith(name + " ")]
+            if len(matches) != 1:
+                raise RuntimeError(f"expected one {name} metric, got {len(matches)}")
+            return int(float(matches[0].rsplit(" ", 1)[1]))
 
-- name: Read health for every expected voting member
-  ansible.builtin.command:
-    argv:
-      - "{{ k3s_server_etcdctl }}"
-      - "--endpoints={{ k3s_server_etcd_endpoint }}"
-      - "--cacert={{ k3s_server_etcd_ca }}"
-      - "--cert={{ k3s_server_etcd_cert }}"
-      - "--key={{ k3s_server_etcd_key }}"
-      - endpoint
-      - health
-      - --write-out=json
-  delegate_to: "{{ item }}"
-  become: true
-  loop: "{{ groups['server'][: k3s_server_expected_member_count | int] }}"
+        def metric_label(name, label):
+            matches = [line for line in lines if line.startswith(name + "{")]
+            if len(matches) != 1:
+                raise RuntimeError(f"expected one {name} metric, got {len(matches)}")
+            prefix = f'{label}="'
+            return matches[0].split(prefix, 1)[1].split('"', 1)[0]
+
+        peer_lines = [
+            line for line in lines
+            if line.startswith("etcd_network_active_peers{")
+            and line.endswith(" 1")
+        ]
+        active_peers = sorted(
+            line.split('Remote="', 1)[1].split('"', 1)[0]
+            for line in peer_lines
+        )
+        print(json.dumps({
+            "active_peers": active_peers,
+            "has_leader": metric_value("etcd_server_has_leader"),
+            "is_leader": metric_value("etcd_server_is_leader"),
+            "is_learner": metric_value("etcd_server_is_learner"),
+            "server_id": metric_label("etcd_server_id", "server_id"),
+            "server_version": metric_label("etcd_server_version", "server_version"),
+        }, sort_keys=True))
+  loop: "{{ groups['server'][: k3s_server_observed_member_count | int] }}"
   loop_control:
     label: "{{ item }}"
-  register: k3s_server_member_health
+  register: k3s_server_etcd_metrics
   changed_when: false
+  delegate_to: "{{ item }}"
+  become: true
   retries: 30
   delay: 2
-  until: k3s_server_member_health is succeeded
+  until: k3s_server_etcd_metrics is succeeded
 
-- name: Require exact healthy voting member set
+- name: Parse embedded-etcd health observations
+  ansible.builtin.set_fact:
+    k3s_server_etcd_observations: >-
+      {{ k3s_server_etcd_metrics.results
+         | map(attribute='stdout')
+         | map('from_json')
+         | list }}
+
+- name: Require exact healthy voting member count
   ansible.builtin.assert:
     that:
-      - k3s_server_members.stdout | from_json | json_query('members[].name') | sort == k3s_server_expected_member_names[:k3s_server_expected_member_count] | sort
-      - k3s_server_members.stdout | from_json | json_query('members[?isLearner==`false`]') | length == k3s_server_expected_member_count | int
-      - k3s_server_members.stdout | from_json | json_query('members[?isLearner==`true`]') | length == 0
-      - k3s_server_etcd_status.stdout | from_json | length == 1
-      - k3s_server_member_health.results | length == k3s_server_expected_member_count | int
-      - k3s_server_member_health.results | selectattr('rc', 'equalto', 0) | list | length == k3s_server_expected_member_count | int
+      - k3s_server_etcd_observations | length == k3s_server_observed_member_count | int
+      - k3s_server_etcd_observations | map(attribute='server_id') | unique | list | length == k3s_server_observed_member_count | int
+      - k3s_server_etcd_observations | selectattr('has_leader', 'equalto', 1) | list | length == k3s_server_observed_member_count | int
+      - k3s_server_etcd_observations | selectattr('is_learner', 'equalto', 0) | list | length == k3s_server_observed_member_count | int
+      - k3s_server_etcd_observations | map(attribute='is_leader') | sum == 1
+      - k3s_server_etcd_observations | map(attribute='server_version') | unique | list == [k3s_server_expected_etcd_version]
     fail_msg: Embedded-etcd is not exactly the expected healthy voting membership.
+
+- name: Require every installed embedded-etcd member to see all expected peers
+  ansible.builtin.assert:
+    that:
+      - >-
+        item.active_peers | sort
+        == k3s_server_etcd_observations
+           | map(attribute='server_id')
+           | difference([item.server_id])
+           | sort
+    fail_msg: Embedded-etcd peer topology does not match the installed voting members.
+  loop: "{{ k3s_server_etcd_observations }}"
+  loop_control:
+    label: "{{ item.server_id }}"
 
 - name: Read installed K3s binary checksum
   ansible.builtin.stat:

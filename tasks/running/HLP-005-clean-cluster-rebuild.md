@@ -12,6 +12,8 @@
 - `ansible/roles/k3s_reset/tasks/assert_absence.yml`
 - `ansible/roles/k3s_reset/defaults/main.yml`
 - `ansible/roles/cluster_health/tasks/main.yml`
+- `ansible/roles/k3s_server/tasks/main.yml`
+- `ansible/roles/k3s_server/defaults/main.yml`
 - `tests/ansible_lifecycle/run-entrypoints.sh`
 - `docs/operations-runbook.md`
 - `skills/k3s-lifecycle/SKILL.md`
@@ -42,11 +44,11 @@ Update the operator runbook and lifecycle skill for the direct `v1.36.2+k3s1` in
 
 ## Blockers
 
-- Reset acceptance is complete. The next live phase is the clean K3s install; it requires its own fresh exact current-session confirmation before any mutation.
+- Clean K3s install acceptance is complete. Private Cilium bootstrap is the next live phase and requires its own fresh exact current-session confirmation before any mutation.
 
 ## Completion handoff
 
-- Summary: Completed the guarded backup-free reset and its interrupted-reset recovery. The recovery selector is boolean-only and may bypass the live-cluster preflight only after every server proves the K3s binary, generated uninstall entrypoints, and primary K3s state directory are already absent.
-- Files changed: `ansible/playbooks/reset.yaml`; `ansible/roles/k3s_reset/defaults/main.yml`; `ansible/roles/k3s_reset/tasks/preflight.yml`; `tasks/running/HLP-005-clean-cluster-rebuild.md`; private `ansible/inventory/production/hosts.yml`.
-- Observed verification: The normal preflight captured all three preservation baselines, revalidated hostname/user/network identity, observed three unique healthy `v3.5.21` etcd voters with one leader and two peers each, captured API/Application/PVC facts, and passed every operation guard. All three generated uninstall entrypoints then ran; their Cilium state temporarily prevented SSH and the user power-cycled the nodes. After reboot, direct scans matched every pinned ECDSA host key exactly and SSH returned with the same hostnames and addresses. The guarded recovery removed the remaining exact K3s/Cilium/Longhorn paths and passed every post-reset service, process, path, user, SSH, network, firmware, and API-port assertion with `0` failed and `0` unreachable hosts. Independent checks found no managed cluster path on any node; TCP 6443 and the controller kubeconfig are absent. All nodes now run the already-pinned `5.15.0-1105-raspi`; `linux-image-raspi` and `linux-raspi` are exactly `5.15.0.1105.103`, and fallback `linux-image-5.15.0-1102-raspi=5.15.0-1102.105` remains installed.
-- Follow-ups: Obtain a fresh exact install confirmation, then run only the direct clean-install phase. Network bootstrap and GitOps remain separately gated. The recovery power-cycle activated the pinned target kernel on all three nodes simultaneously rather than through the planned serial kernel play; record this deviation in final acceptance.
+- Summary: Completed and live-verified the guarded backup-free reset, interrupted-reset recovery, and direct three-server K3s install. The install validates embedded etcd from each server's local metrics endpoint, supports safe forward resumption after an interrupted serial join, waits for each joined node to become Ready, and keeps the join token in a root-only file.
+- Files changed: `ansible/playbooks/reset.yaml`; `ansible/roles/k3s_reset/defaults/main.yml`; `ansible/roles/k3s_reset/tasks/preflight.yml`; `ansible/roles/k3s_reset/tasks/capture_host_facts.yml`; `ansible/roles/k3s_reset/tasks/assert_absence.yml`; `ansible/roles/cluster_health/tasks/main.yml`; `ansible/roles/k3s_server/defaults/main.yml`; `ansible/roles/k3s_server/tasks/main.yml`; `tests/ansible_lifecycle/run-entrypoints.sh`; `tasks/running/HLP-005-clean-cluster-rebuild.md`; private `ansible/inventory/production/hosts.yml`.
+- Observed verification: Reset preservation and absence acceptance passed on all three nodes. The authorized install then completed with `0` failed and `0` unreachable hosts. Controller `/readyz` returned `ok`; all three inventory servers are Ready `control-plane,etcd` nodes at `v1.36.2+k3s1`, with unchanged addresses and the pinned `5.15.0-1105-raspi` kernel. Local metrics independently reported three unique `v3.6.12` voting etcd members, one leader, no learners, and both peer IDs active from every member. The controller kubeconfig was exported to `~/.kube/homelab-production` with mode `0600`, context `homelab`, and a working API endpoint. Public syntax, lifecycle entrypoint, Ansible, manifest, graph, private inventory, and private `make validate` checks passed. The recovery power-cycle activated the target kernel simultaneously rather than through the planned serial kernel play.
+- Follow-ups: Obtain the separate `BOOTSTRAP NETWORK homelab-production` confirmation and complete private Cilium acceptance. Then obtain the separate GitOps confirmation and prove the final Applications, PVCs, smoke tests, and credential-residue criteria.
