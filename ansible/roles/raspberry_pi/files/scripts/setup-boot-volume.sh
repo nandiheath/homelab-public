@@ -16,7 +16,7 @@ if [[ $# -lt 2 ]]; then
 fi
 node_id=$1
 user="$2"
-hostname="node-rpi-$node_id"
+hostname="node-$node_id"
 
 [[ ! -d /Volumes/system-boot ]] && echo "Volume not mount. Make sure the SD-Card is inserted." && exit 1
 

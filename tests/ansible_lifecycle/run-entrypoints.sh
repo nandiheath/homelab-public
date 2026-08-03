@@ -118,8 +118,8 @@ assert_reject 'upgrade missing authorization' ansible/playbooks/upgrade.yaml "${
 assert_reject 'upgrade wrong authorization' ansible/playbooks/upgrade.yaml "${upgrade_common[@]}" -e 'operation_guard_confirmation=NOT AUTHORIZED'
 assert_reject 'upgrade boolean authorization' ansible/playbooks/upgrade.yaml "${upgrade_common[@]}" -e '{"operation_guard_confirmation":true}'
 assert_reject 'upgrade stale cluster' ansible/playbooks/upgrade.yaml "${upgrade_common[@]}" -e cluster_id=stale-production
-assert_reject 'upgrade wrong source' ansible/playbooks/upgrade.yaml -e upgrade_source_version=v1.36.1+k3s1 -e upgrade_target_version=v1.36.2+k3s1 -e 'operation_guard_confirmation=UPGRADE homelab-production FROM v1.36.1+k3s1 TO v1.36.2+k3s1'
-assert_reject 'upgrade wrong target' ansible/playbooks/upgrade.yaml -e upgrade_source_version=v1.36.2+k3s1 -e upgrade_target_version=v1.36.3+k3s1 -e 'operation_guard_confirmation=UPGRADE homelab-production FROM v1.36.2+k3s1 TO v1.36.3+k3s1'
+assert_reject 'upgrade wrong source' ansible/playbooks/upgrade.yaml -e upgrade_source_version=v1.36.1+k3s1 -e upgrade_target_version=v1.36.2+k3s1 -e 'operation_guard_confirmation=UPGRADE fixture-cluster FROM v1.36.1+k3s1 TO v1.36.2+k3s1'
+assert_reject 'upgrade wrong target' ansible/playbooks/upgrade.yaml -e upgrade_source_version=v1.36.2+k3s1 -e upgrade_target_version=v1.36.3+k3s1 -e 'operation_guard_confirmation=UPGRADE fixture-cluster FROM v1.36.2+k3s1 TO v1.36.3+k3s1'
 
 assert_reject 'reset missing authorization' ansible/playbooks/reset.yaml "${reset_args[@]}"
 assert_reject 'reset wrong authorization' ansible/playbooks/reset.yaml "${reset_args[@]}" -e 'operation_guard_confirmation=NOT AUTHORIZED'

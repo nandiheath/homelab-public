@@ -30,13 +30,14 @@ Cilium supplies the CNI, cluster-pool IPAM, network policy, and kube-proxy
 replacement. Do not bootstrap over a cluster that contains evidence of the
 disabled packaged components or reports a conflicting Pod or Service CIDR.
 
-Set controller paths once:
+Set controller paths and the private inventory's exact cluster identity once:
 
 ```bash
-export PUBLIC_REPO=/Users/nandi/workspace/homelab-public
-export PRIVATE_REPO=/Users/nandi/workspace/homelab-private
+export PUBLIC_REPO="$HOME/workspace/homelab-public"
+export PRIVATE_REPO="$HOME/workspace/homelab-private"
 export INVENTORY="$PRIVATE_REPO/ansible/inventory/production/hosts.yml"
-export CONTROLLER_KUBECONFIG="$HOME/.kube/homelab-production"
+export CLUSTER_ID="<cluster-id>"
+export CONTROLLER_KUBECONFIG="$HOME/.kube/$CLUSTER_ID"
 export CONTROLLER_KUBECTL="$PUBLIC_REPO/bin/kubectl"
 export PRIVATE_CILIUM="$PRIVATE_REPO/artifacts/infrastructure/cilium"
 cd "$PUBLIC_REPO"
@@ -67,7 +68,7 @@ cd "$PUBLIC_REPO"
 5. Confirm controller kubeconfig and any credential inputs are controller-owned mode `0600`. Confirm pinned installer, K3s binary, and kernel values match private inventory.
 6. Confirm 1Password access without printing or persisting resolved values.
 7. Capture the playbook's non-secret node, kernel, K3s, etcd, Application, and PVC report. Do not create backup evidence; backup/DR design belongs to deferred HLP-012.
-8. Record the exact public and private repository revisions, controller tool versions, cluster identity `homelab-production`, three healthy current voting etcd members, healthy API/Cilium, and current Application/PVC state in the non-secret handoff. Any mismatch stops before mutation.
+8. Record the exact public and private repository revisions, controller tool versions, configured cluster identity, three healthy current voting etcd members, healthy API/Cilium, and current Application/PVC state in the non-secret handoff. Any mismatch stops before mutation.
 
 Stop before mutation on any inventory/key mismatch, unexpected package state, insufficient boot capacity, degraded API/Cilium/node/etcd state outside the explicitly permitted pre-CNI condition, conflicting default K3s networking or packaged ingress evidence, live network-range mismatch, learner or stale member, checksum mismatch, token exposure, or desired-state drift.
 
@@ -84,7 +85,7 @@ wrong-text input stops before the phase's mutation transaction.
 Authorization must be exactly:
 
 ```text
-RESET homelab-production AND DESTROY ALL KUBERNETES DATA
+RESET <cluster-id> AND DESTROY ALL KUBERNETES DATA
 ```
 
 Run:
@@ -93,7 +94,7 @@ Run:
 ansible-playbook -i "$INVENTORY" ansible/playbooks/reset.yaml \
   -e "kubeconfig=$CONTROLLER_KUBECONFIG" \
   -e "controller_kubectl=$CONTROLLER_KUBECTL" \
-  -e '{"operation_guard_confirmation":"RESET homelab-production AND DESTROY ALL KUBERNETES DATA"}'
+  -e "{\"operation_guard_confirmation\":\"RESET ${CLUSTER_ID} AND DESTROY ALL KUBERNETES DATA\"}"
 ```
 
 The playbook removes agents first, secondary servers one at a time, and the initial server last. On partial failure, diagnose and finish the wipe; do not restore old cluster state. After completion require every host reachable with unchanged Ubuntu/SSH/network identity and require K3s services, processes, scripts, state, embedded etcd, CNI state, Longhorn state, TCP 6443 listeners, and controller kubeconfig absent.
@@ -103,7 +104,7 @@ The playbook removes agents first, secondary servers one at a time, and the init
 Authorization must be exactly:
 
 ```text
-ACTIVATE KERNEL 5.15.0-1105-raspi ON homelab-production
+ACTIVATE KERNEL 5.15.0-1105-raspi ON <cluster-id>
 ```
 
 Run only in `cluster_absent` mode for this rebuild:
@@ -111,7 +112,7 @@ Run only in `cluster_absent` mode for this rebuild:
 ```bash
 ansible-playbook -i "$INVENTORY" ansible/playbooks/kernel_upgrade.yaml \
   -e raspi_kernel_mode=cluster_absent \
-  -e '{"operation_guard_confirmation":"ACTIVATE KERNEL 5.15.0-1105-raspi ON homelab-production"}'
+  -e "{\"operation_guard_confirmation\":\"ACTIVATE KERNEL 5.15.0-1105-raspi ON ${CLUSTER_ID}\"}"
 ```
 
 Only `linux-image-raspi=5.15.0.1105.103` and `linux-raspi=5.15.0.1105.103` may be installed. Do not run a distribution upgrade, generic latest upgrade, autoremove, firmware update, bootloader update, or OS release upgrade. After each serial reboot require SSH recovery, `uname -r` equal to `5.15.0-1105-raspi`, no reboot-required marker, expected boot files, retained `5.15.0-1102-raspi`, and continued K3s absence.
@@ -121,7 +122,7 @@ Only `linux-image-raspi=5.15.0.1105.103` and `linux-raspi=5.15.0.1105.103` may b
 Authorization must be exactly:
 
 ```text
-INSTALL K3S v1.36.2+k3s1 ON homelab-production
+INSTALL K3S v1.36.2+k3s1 ON <cluster-id>
 ```
 
 Run:
@@ -129,7 +130,7 @@ Run:
 ```bash
 ansible-playbook -i "$INVENTORY" ansible/playbooks/install.yaml \
   -e "kubeconfig=$CONTROLLER_KUBECONFIG" \
-  -e '{"operation_guard_confirmation":"INSTALL K3S v1.36.2+k3s1 ON homelab-production"}'
+  -e "{\"operation_guard_confirmation\":\"INSTALL K3S v1.36.2+k3s1 ON ${CLUSTER_ID}\"}"
 ```
 
 Require installer and arm64 binary checksum validation. Every server must use
@@ -150,7 +151,7 @@ not install a temporary or default CNI to make that phase appear healthy.
 Authorization must be exactly:
 
 ```text
-BOOTSTRAP NETWORK homelab-production
+BOOTSTRAP NETWORK <cluster-id>
 ```
 
 Run from the controller:
@@ -160,7 +161,7 @@ ansible-playbook -i "$INVENTORY" ansible/playbooks/bootstrap_network.yaml \
   -e "kubeconfig=$CONTROLLER_KUBECONFIG" \
   -e "controller_kubectl=$CONTROLLER_KUBECTL" \
   -e "private_cilium_artifact=$PRIVATE_CILIUM" \
-  -e '{"operation_guard_confirmation":"BOOTSTRAP NETWORK homelab-production"}'
+  -e "{\"operation_guard_confirmation\":\"BOOTSTRAP NETWORK ${CLUSTER_ID}\"}"
 ```
 
 This phase requires only controller API access and the final private Cilium
@@ -204,7 +205,7 @@ The uniquely named probe Pod is deleted in `always` and its absence is asserted.
 Authorization must be exactly:
 
 ```text
-BOOTSTRAP homelab-production
+BOOTSTRAP <cluster-id>
 ```
 
 Resolve required credential-manifest content through the approved 1Password environment boundary without printing it, then run:
@@ -213,7 +214,7 @@ Resolve required credential-manifest content through the approved 1Password envi
 op run -- ansible-playbook -i "$INVENTORY" ansible/playbooks/bootstrap_gitops.yml \
   -e "kubeconfig=$CONTROLLER_KUBECONFIG" \
   -e "controller_kubectl=$CONTROLLER_KUBECTL" \
-  -e '{"operation_guard_confirmation":"BOOTSTRAP homelab-production"}'
+  -e "{\"operation_guard_confirmation\":\"BOOTSTRAP ${CLUSTER_ID}\"}"
 ```
 
 The playbook runs kubectl only on the controller, creates mode-`0600` temporary credential files immediately before no-log apply, and deletes them in `always`. Ordering is Argo CD, External Secrets, 1Password Connect, temporary credentials, repository credentials, public root, then private root. GitOps bootstrap never installs or changes K3s. Its reconciliation must install cert-manager and self-heal Cilium from the unchanged final private artifact, replacing the temporary plaintext Hubble ConfigMap value and creating the omitted Hubble Certificate.

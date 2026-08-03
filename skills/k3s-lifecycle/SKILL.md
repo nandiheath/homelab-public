@@ -1,6 +1,6 @@
 ---
 name: k3s-lifecycle
-description: Safely operate the homelab-production K3s reset, Raspberry Pi kernel activation, direct clean install, and controller GitOps bootstrap.
+description: Safely operate guarded K3s reset, Raspberry Pi kernel activation, direct clean install, and controller GitOps bootstrap.
 ---
 
 # K3s lifecycle

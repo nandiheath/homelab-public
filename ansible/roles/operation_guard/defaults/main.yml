@@ -5,7 +5,7 @@ operation_guard_invocation: direct
 operation_guard_operation: ""
 operation_guard_parent_context: {}
 
-operation_guard_cluster_id: homelab-production
+operation_guard_cluster_id: "{{ cluster_id | default('', true) }}"
 operation_guard_expected_server_count: 3
 operation_guard_minimum_ansible_version: 2.16.0
 operation_guard_controller_owner: "{{ lookup('ansible.builtin.env', 'USER') }}"

@@ -7,7 +7,7 @@
       - operation_guard_operation is string
       - operation_guard_operation in ((operation_guard_confirmations.keys() | list) + ['k3s_upgrade'])
       - operation_guard_cluster_id is string
-      - operation_guard_cluster_id == 'homelab-production'
+      - operation_guard_cluster_id | length > 0
       - operation_guard_source_version is string
       - operation_guard_target_version is string
       - operation_guard_kernel_release is string

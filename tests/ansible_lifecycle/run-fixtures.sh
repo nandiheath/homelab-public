@@ -110,11 +110,11 @@ expect_network_reject() {
 }
 
 operations=(
-  'reset|v1.36.2+k3s1|v1.36.2+k3s1|RESET homelab-production AND DESTROY ALL KUBERNETES DATA'
-  'kernel_activation|v1.36.2+k3s1|v1.36.2+k3s1|ACTIVATE KERNEL 5.15.0-1105-raspi ON homelab-production'
-  'k3s_install|v1.36.2+k3s1|v1.36.2+k3s1|INSTALL K3S v1.36.2+k3s1 ON homelab-production'
-  'bootstrap_network|v1.36.2+k3s1|v1.36.2+k3s1|BOOTSTRAP NETWORK homelab-production'
-  'bootstrap_gitops|v1.36.2+k3s1|v1.36.2+k3s1|BOOTSTRAP homelab-production'
+  'reset|v1.36.2+k3s1|v1.36.2+k3s1|RESET fixture-cluster AND DESTROY ALL KUBERNETES DATA'
+  'kernel_activation|v1.36.2+k3s1|v1.36.2+k3s1|ACTIVATE KERNEL 5.15.0-1105-raspi ON fixture-cluster'
+  'k3s_install|v1.36.2+k3s1|v1.36.2+k3s1|INSTALL K3S v1.36.2+k3s1 ON fixture-cluster'
+  'bootstrap_network|v1.36.2+k3s1|v1.36.2+k3s1|BOOTSTRAP NETWORK fixture-cluster'
+  'bootstrap_gitops|v1.36.2+k3s1|v1.36.2+k3s1|BOOTSTRAP fixture-cluster'
 )
 
 for fixture_case in "${operations[@]}"; do
@@ -126,9 +126,9 @@ for fixture_case in "${operations[@]}"; do
   expect_reject "$operation wrong authorization" "$operation" "$source" "$target" 'NOT AUTHORIZED'
 done
 
-expect_reject 'direct install wrong source' k3s_install v1.36.1+k3s1 v1.36.1+k3s1 'INSTALL K3S v1.36.1+k3s1 ON homelab-production'
-expect_reject 'direct install wrong target' k3s_install v1.36.3+k3s1 v1.36.3+k3s1 'INSTALL K3S v1.36.3+k3s1 ON homelab-production'
-expect_reject 'upgrade path disabled' k3s_upgrade v1.36.2+k3s1 v1.36.2+k3s1 'UPGRADE homelab-production FROM v1.36.2+k3s1 TO v1.36.2+k3s1'
+expect_reject 'direct install wrong source' k3s_install v1.36.1+k3s1 v1.36.1+k3s1 'INSTALL K3S v1.36.1+k3s1 ON fixture-cluster'
+expect_reject 'direct install wrong target' k3s_install v1.36.3+k3s1 v1.36.3+k3s1 'INSTALL K3S v1.36.3+k3s1 ON fixture-cluster'
+expect_reject 'upgrade path disabled' k3s_upgrade v1.36.2+k3s1 v1.36.2+k3s1 'UPGRADE fixture-cluster FROM v1.36.2+k3s1 TO v1.36.2+k3s1'
 expect_network_accept 'valid explicit contract'
 expect_network_reject 'missing cluster CIDR' -e cluster_cidr=
 expect_network_reject 'malformed cluster CIDR' -e cluster_cidr=10.244.0.0/33
