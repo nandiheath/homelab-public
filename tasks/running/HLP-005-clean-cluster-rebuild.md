@@ -37,11 +37,11 @@ Update the operator runbook and lifecycle skill for the direct `v1.36.2+k3s1` in
 
 ## Blockers
 
-- The repaired preflight now uses remote `/usr/bin/getent` and explicit user-list comparison. This execution reached preflight but had no cached become credential, so Ansible stopped at the privileged setup task with `sudo: a password is required`; no mutation occurred.
+- The preflight now enumerates remote users through the pinned `/usr/bin/python3` `pwd` module, avoiding unavailable `getent` binaries and controller PATH lookup. The current retry is ready for another authorized reset run.
 
 ## Completion handoff
 
-- Summary: Repaired `ansible/playbooks/reset.yaml` to use `include_role` task entrypoints and repaired `ansible/roles/k3s_reset/tasks/preflight.yml` to read remote users without controller-only executable lookup. No reset mutation has completed.
+- Summary: Repaired `ansible/playbooks/reset.yaml` to use `include_role` task entrypoints and repaired `ansible/roles/k3s_reset/tasks/preflight.yml` to enumerate remote users through Python.
 - Files changed: `ansible/playbooks/reset.yaml`; `ansible/roles/k3s_reset/tasks/preflight.yml`; `tasks/running/HLP-005-clean-cluster-rebuild.md`.
-- Observed verification: Reset syntax and task expansion passed; `./scripts/validate-ansible.sh` and `./scripts/validate.sh` passed (`352` resources; `245` valid; `0` invalid; `0` errors; `107` skipped). Remote Python and `/usr/bin/getent` checks passed on all three nodes. The latest authorized reset attempt stopped before mutation because the controller execution did not have a cached become password.
-- Follow-ups: Rerun with `--ask-become-pass` / `-K` so the remote privileged preflight can complete. Later phases still require separate confirmations.
+- Observed verification: Reset syntax and task expansion passed; `./scripts/validate-ansible.sh` and `./scripts/validate.sh` passed (`352` resources; `245` valid; `0` invalid; `0` errors; `107` skipped). Privileged `/usr/bin/python3` user enumeration passed on all three nodes. No wipe task, reboot, install, network bootstrap, GitOps bootstrap, or Kubernetes data mutation has run.
+- Follow-ups: Rerun with `--ask-become-pass` / `-K` and the exact reset confirmation. Later phases still require separate confirmations.

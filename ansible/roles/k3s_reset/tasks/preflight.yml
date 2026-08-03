@@ -33,7 +33,12 @@
 
 - name: Refresh live user inventory immediately before reset authorization
   ansible.builtin.command:
-    argv: [/usr/bin/getent, passwd]
+    argv:
+      - /usr/bin/python3
+      - -c
+      - |
+        import pwd
+        print("\n".join(sorted(entry.pw_name for entry in pwd.getpwall())))
   loop: "{{ groups['k3s_cluster'] }}"
   loop_control:
     label: "{{ item }}"
