@@ -7,6 +7,7 @@
 3. Work in a dedicated worktree. A task's `Owned paths` must be disjoint from every task in `tasks/running/`.
 4. Run the focused proof in the task. Record observed output for every acceptance criterion in its completion handoff.
 5. Do not merge or delete task files. The serial rollup owner does that after integration verification, updates `PROJECT_STATUS.md`, and removes successful task documents.
+6. Apply `skills/contribution-workflow/SKILL.md` to every change. Complete a Conventional Commit and a pull request with its required description before landing work.
 
 ## Repository map
 
