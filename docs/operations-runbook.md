@@ -1,74 +1,204 @@
-# Operations runbook
+# K3s lifecycle operations runbook
 
-> **Safety boundary:** All procedures below can affect live hosts, the Kubernetes control plane, or credentials. Do not execute them without explicit authorization, an approved maintenance window, and an operator with the required private inventory and credentials. Never place private inventories, kubeconfigs, tokens, or exported secrets in this repository.
+> This procedure irreversibly destroys all Kubernetes runtime and persistent application data. It preserves Ubuntu, SSH access, host identity, networking, boot firmware, and the retained prior kernel. It intentionally creates no backup, snapshot, token export, recovery bundle, or restore point.
 
-## Before any live operation
+## Fixed lifecycle
 
-1. Record the change owner, maintenance window, scope, and rollback decision point in the incident or change record.
-2. Confirm control-plane health, workload health, backups, and access from the approved operator environment. **Placeholder:** add the organization-approved health and backup commands here.
-3. Confirm the target inventory, kubeconfig, and credential files are private, mode-restricted, and outside this repository.
-4. Announce the maintenance window and identify the operator who may authorize rollback.
+| Stage | K3s | embedded etcd |
+|---|---|---|
+| Clean install | `v1.33.2+k3s1` | `v3.5.21-k3s1` |
+| Bridge | `v1.33.10+k3s1` | `v3.5.26-k3s1` |
+| Final | `v1.33.13+k3s1` | `v3.6.12-k3s1` |
 
-## Upgrade K3s
+Direct `v1.33.2+k3s1` to `v1.33.13+k3s1` upgrade is prohibited. Downgrade, partial destructive member rejoin, eviction bypass, and PDB bypass are prohibited.
 
-**Purpose:** move the cluster to the version declared by `k3s_version` in the private Ansible inventory. `ansible/playbooks/upgrade.yaml` upgrades servers serially, then agents; the role only updates nodes whose installed version is older than the requested version.
+Set controller paths once:
 
-### Procedure
+```bash
+export PUBLIC_REPO=/Users/nandi/workspace/homelab-public
+export PRIVATE_REPO=/Users/nandi/workspace/homelab-private
+export INVENTORY="$PRIVATE_REPO/ansible/inventory/production/hosts.yml"
+export CONTROLLER_KUBECONFIG="$HOME/.kube/homelab-production"
+export CONTROLLER_KUBECTL="$PUBLIC_REPO/bin/kubectl"
+export PRIVATE_CILIUM="$PRIVATE_REPO/artifacts/infrastructure/cilium"
+cd "$PUBLIC_REPO"
+. ./bin/activate-hermit
+```
 
-1. Choose the target K3s version and update it in the approved private inventory. Do not change the public example inventory to record a live target.
-2. Review the planned inventory and maintenance scope. **Placeholder:** add the approved dry-run or preflight command for the private inventory.
-3. Execute the upgrade playbook from an approved operator environment:
+## Mandatory preflight
 
-   ```bash
-   ansible-playbook -i <private-inventory> ansible/playbooks/upgrade.yaml
-   ```
-
-4. After each serial server upgrade, verify the API and control-plane health before the playbook advances. After agent upgrades, verify workload scheduling and networking.
-5. Record installed versions and health evidence. If health regresses, stop further upgrades and follow the approved rollback or recovery procedure. **Placeholder:** document the tested rollback version and procedure.
-
-## Bootstrap a GitOps cluster
-
-**Purpose:** provision K3s, install Cilium before dependent controllers, install Argo CD plus secret-controller prerequisites, apply operator-supplied credential manifests, and seed the public root Application.
-
-### Preconditions
-
-- Rendered public artifacts are current and `./scripts/validate.sh` has passed.
-- A private inventory defines the intended server and agent hosts.
-- The operator has two mode-restricted, external credential-manifest paths for 1Password Connect and Argo CD GitHub App credentials.
-- The change is explicitly authorized. This is a cluster-mutating operation.
-
-### Procedure
-
-1. Confirm the private inventory and credential-manifest paths with the authorized operator; do not print their contents.
-2. Run the only supported Ansible bootstrap path:
+1. Reserve working physical or serial recovery access to all three Raspberry Pis. A node that does not return after reboot stops the whole procedure.
+2. From each trusted local/serial console, obtain the active public SSH host key and SHA256 fingerprint. Record the verified public key in private inventory. Never establish trust with `ssh-keyscan`, `accept-new`, a first SSH prompt, `StrictHostKeyChecking=no`, or `/dev/null` known-hosts.
+3. Require private inventory parsing and both repository validations:
 
    ```bash
-   ansible-playbook -i <private-inventory> ansible/playbooks/bootstrap_gitops.yml \
-     -e bootstrap_connect_credentials_file=<restricted-connect-manifest> \
-     -e bootstrap_github_app_credentials_file=<restricted-github-app-manifest>
+   ansible-inventory -i "$INVENTORY" --list >/dev/null
+   ./scripts/validate-ansible.sh
+   ./scripts/validate.sh
+   cd "$PRIVATE_REPO"
+   . ./bin/activate-hermit
+   make validate
+   ./scripts/render.sh --all --application
+   ./scripts/render.sh --all --infra
+   "$PUBLIC_REPO/scripts/validate-repository-graph.sh" "$PRIVATE_REPO"
+   cd "$PUBLIC_REPO"
+   . ./bin/activate-hermit
    ```
 
-3. Observe the built-in Cilium rollout check and Argo repository-credential wait. Then verify that Argo CD has reconciled the public root Application. **Placeholder:** add the approved post-bootstrap health dashboard and escalation path.
-4. Do not use `scripts/bootstrap.sh` as a routine bootstrap path. It is a legacy helper that directly applies manifests and only creates bootstrap secrets when they are absent; it is not a safe credential-rotation mechanism.
+4. Require the private Cilium artifact to contain exactly five `KUBERNETES_SERVICE_HOST` values equal to the private `api_endpoint`, contain no `192.0.2.11`, and otherwise match the public source.
+5. Confirm controller kubeconfig and any credential inputs are controller-owned mode `0600`. Confirm pinned installer, K3s binary, and kernel values match private inventory.
+6. Confirm 1Password access without printing or persisting resolved values.
+7. Capture the playbook's non-secret node, kernel, K3s, etcd, Application, and PVC report. Do not create backup evidence; backup/DR design belongs to deferred HLP-012.
 
-## Rotate secrets
+Stop before mutation on any inventory/key mismatch, unexpected package state, insufficient boot capacity, degraded API/Cilium/node/etcd state, learner or stale member, checksum mismatch, token exposure, or desired-state drift.
 
-**Purpose:** rotate credentials stored in the approved secret system while preserving the public/private boundary. The public `ClusterSecretStore` reads a 1Password Connect token from `external-secrets/onepassword-connect-token`; the Argo CD GitHub App credentials are materialized by an `ExternalSecret` from the `github-app-credentials` item.
+## Destructive reset
 
-### Procedure
+Authorization must be exactly:
 
-1. Identify the exact credential, dependent controllers, expiry, owner, and rollback credential in the change record. **Placeholder:** add the approved inventory of secret owners and rotation cadence.
-2. Rotate the credential in the approved external secret system. Never add its value to Git, a task document, a PR, terminal output, or this runbook.
-3. For a 1Password Connect authentication change, have the authorized operator update the private bootstrap credential manifest. For an Argo CD GitHub App change, update the source item and properties expected by `argocd/infrastructure/bootstrap/externalsecret-argocd.yaml`.
-4. Use the approved controller reconciliation method and verify the resulting Kubernetes Secret plus every dependent workload or repository connection. **Placeholder:** document the approved reconcile command and expected status fields for this environment.
-5. Retire the prior credential only after the new credential works and the rollback window closes. Record completion without recording secret values.
+```text
+RESET homelab-production AND DESTROY ALL KUBERNETES DATA
+```
 
-## Incident and recovery placeholders
+Run:
 
-The following must be completed with environment-specific, tested procedures before operational use:
+```bash
+ansible-playbook -i "$INVENTORY" ansible/playbooks/reset.yaml \
+  -e "kubeconfig=$CONTROLLER_KUBECONFIG" \
+  -e "controller_kubectl=$CONTROLLER_KUBECTL" \
+  -e '{"operation_guard_confirmation":"RESET homelab-production AND DESTROY ALL KUBERNETES DATA"}'
+```
 
-- **Control-plane loss:** [placeholder: restore source, recovery owner, and tested command sequence]
-- **etcd restore:** [placeholder: backup location, retention, encryption access, and restore drill evidence]
-- **Node replacement:** [placeholder: hardware enrollment and inventory update procedure]
-- **Argo CD reconciliation failure:** [placeholder: diagnostic steps and escalation path]
-- **Secret-provider outage:** [placeholder: break-glass policy, approvers, and audit requirements]
+The playbook removes agents first, secondary servers one at a time, and the initial server last. On partial failure, diagnose and finish the wipe; do not restore old cluster state. After completion require every host reachable with unchanged Ubuntu/SSH/network identity and require K3s services, processes, scripts, state, embedded etcd, CNI state, Longhorn state, TCP 6443 listeners, and controller kubeconfig absent.
+
+## Activate the pinned Raspberry Pi kernel
+
+Authorization must be exactly:
+
+```text
+ACTIVATE KERNEL 5.15.0-1105-raspi ON homelab-production
+```
+
+Run only in `cluster_absent` mode for this rebuild:
+
+```bash
+ansible-playbook -i "$INVENTORY" ansible/playbooks/kernel_upgrade.yaml \
+  -e raspi_kernel_mode=cluster_absent \
+  -e '{"operation_guard_confirmation":"ACTIVATE KERNEL 5.15.0-1105-raspi ON homelab-production"}'
+```
+
+Only `linux-image-raspi=5.15.0.1105.103` and `linux-raspi=5.15.0.1105.103` may be installed. Do not run a distribution upgrade, generic latest upgrade, autoremove, firmware update, bootloader update, or OS release upgrade. After each serial reboot require SSH recovery, `uname -r` equal to `5.15.0-1105-raspi`, no reboot-required marker, expected boot files, retained `5.15.0-1102-raspi`, and continued K3s absence.
+
+## Install the clean source cluster
+
+Authorization must be exactly:
+
+```text
+INSTALL K3S v1.33.2+k3s1 ON homelab-production
+```
+
+Run:
+
+```bash
+ansible-playbook -i "$INVENTORY" ansible/playbooks/install.yaml \
+  -e "kubeconfig=$CONTROLLER_KUBECONFIG" \
+  -e '{"operation_guard_confirmation":"INSTALL K3S v1.33.2+k3s1 ON homelab-production"}'
+```
+
+Require installer and arm64 binary checksum validation. Tokens may exist only in root-owned mode-`0600` token files and must never appear in service arguments, mode-`0644` units, logs, or cached facts. After every serial join require the expected node identity, learner promotion, and healthy member count. Export the controller kubeconfig only after exactly three voting etcd `v3.5.21-k3s1` members are healthy.
+
+## Bootstrap private Cilium
+
+Authorization must be exactly:
+
+```text
+BOOTSTRAP NETWORK homelab-production
+```
+
+Run from the controller:
+
+```bash
+ansible-playbook -i "$INVENTORY" ansible/playbooks/bootstrap_network.yaml \
+  -e "kubeconfig=$CONTROLLER_KUBECONFIG" \
+  -e "controller_kubectl=$CONTROLLER_KUBECTL" \
+  -e "private_cilium_artifact=$PRIVATE_CILIUM" \
+  -e '{"operation_guard_confirmation":"BOOTSTRAP NETWORK homelab-production"}'
+```
+
+Require three Ready `v1.33.2+k3s1` nodes, healthy API and private-endpoint Cilium, exactly three voting etcd `v3.5.21-k3s1` members, no token exposure, and zero Argo Applications and PVCs.
+
+## Cross the embedded-etcd bridge
+
+First authorization:
+
+```text
+UPGRADE homelab-production FROM v1.33.2+k3s1 TO v1.33.10+k3s1
+```
+
+Run:
+
+```bash
+ansible-playbook -i "$INVENTORY" ansible/playbooks/upgrade.yaml \
+  -e upgrade_source_version=v1.33.2+k3s1 \
+  -e upgrade_target_version=v1.33.10+k3s1 \
+  -e "kubeconfig=$CONTROLLER_KUBECONFIG" \
+  -e '{"operation_guard_confirmation":"UPGRADE homelab-production FROM v1.33.2+k3s1 TO v1.33.10+k3s1"}'
+```
+
+Require all nodes at `v1.33.10+k3s1`, exactly three voting etcd `v3.5.26-k3s1` members, no learner/stale member, healthy API/nodes/Cilium, and no Application or PVC.
+
+Final authorization:
+
+```text
+UPGRADE homelab-production FROM v1.33.10+k3s1 TO v1.33.13+k3s1
+```
+
+Run:
+
+```bash
+ansible-playbook -i "$INVENTORY" ansible/playbooks/upgrade.yaml \
+  -e upgrade_source_version=v1.33.10+k3s1 \
+  -e upgrade_target_version=v1.33.13+k3s1 \
+  -e "kubeconfig=$CONTROLLER_KUBECONFIG" \
+  -e '{"operation_guard_confirmation":"UPGRADE homelab-production FROM v1.33.10+k3s1 TO v1.33.13+k3s1"}'
+```
+
+Require all nodes at `v1.33.13+k3s1`, exactly three voting etcd `v3.6.12-k3s1` members, no skew or stale member, healthy API/nodes/Cilium, and no Application or PVC.
+
+## Upgrade failure handling
+
+- If quorum and source-version members remain healthy, leave the failed node cordoned, diagnose, and repair forward at the same target.
+- If quorum or datastore health cannot be recovered, run the full guarded reset again with a fresh destructive confirmation. Reinstall `v1.33.2+k3s1` before retrying the first bridge, or `v1.33.10+k3s1` before retrying the final roll. Bootstrap private Cilium and retry the complete roll.
+- Never downgrade an existing datastore, restore an unverified snapshot, or partially wipe/rejoin members around damaged quorum.
+
+## Bootstrap GitOps
+
+Authorization must be exactly:
+
+```text
+BOOTSTRAP homelab-production
+```
+
+Resolve required credential-manifest content through the approved 1Password environment boundary without printing it, then run:
+
+```bash
+op run -- ansible-playbook -i "$INVENTORY" ansible/playbooks/bootstrap_gitops.yml \
+  -e "kubeconfig=$CONTROLLER_KUBECONFIG" \
+  -e "controller_kubectl=$CONTROLLER_KUBECTL" \
+  -e '{"operation_guard_confirmation":"BOOTSTRAP homelab-production"}'
+```
+
+The playbook runs kubectl only on the controller, creates mode-`0600` temporary credential files immediately before no-log apply, and deletes them in `always`. Ordering is Argo CD, External Secrets, 1Password Connect, temporary credentials, repository credentials, public root, then private root. GitOps bootstrap never installs or changes K3s.
+
+## Acceptance
+
+Require all of the following before closing the maintenance window:
+
+- Three Ready nodes at `v1.33.13+k3s1`; three healthy voting etcd `v3.6.12-k3s1` members; no learner, stale member, or version skew.
+- Healthy API and Cilium; Cilium tracks the private artifact and no production resource contains `192.0.2.11`.
+- Argo CD, 1Password Connect, External Secrets, Longhorn, CNPG, ingress, public root, and private root are Healthy; every expected Application is Synced and Healthy; no legacy Argo owner remains.
+- Exactly five newly created Bound PVCs and clean/empty application smoke-test results.
+- No temporary credential file on controller or node and no token in process arguments, units, logs, or fact cache.
+- Longhorn desired state reports `defaultSettings.nodeDrainPolicy: block-for-eviction`; no backup target or recurring backup job was added.
+
+Deferred GitHub App key rotation, repository archival, and HLP-012 backup/DR investigation remain separate work. HLP-012 authorizes no live NAS, credential, or cluster mutation.
