@@ -87,6 +87,9 @@ network_args=(
   -e "private_cilium_artifact=$repo_root/artifacts/infrastructure/cilium"
   -e "public_cilium_artifact=$repo_root/artifacts/infrastructure/cilium"
   -e api_endpoint=198.51.100.10
+  -e cluster_cidr=198.18.0.0/16
+  -e service_cidr=198.19.0.0/16
+  -e cluster_dns=198.19.0.10
 )
 reset_args=(-l localhost -e "kubeconfig=$fixture_kubeconfig" -e controller_kubectl=/bin/false)
 
@@ -140,7 +143,7 @@ assert_tasks 'kernel transaction' 'Reboot each node into the pinned kernel' ansi
 assert_tasks 'reboot transaction' 'Reboot node after pinned kernel installation' ansible/playbooks/reboot.yaml
 assert_tasks 'install transaction' 'Install and verify one embedded-etcd server' ansible/playbooks/install.yaml
 assert_tasks 'reset transaction' 'Uninstall the role-owned K3s installation' ansible/playbooks/reset.yaml "${reset_args[@]}"
-assert_tasks 'network transaction' 'Apply private Cilium artifact from controller' ansible/playbooks/bootstrap_network.yaml "${network_args[@]}"
+assert_tasks 'network transaction' 'Apply temporary Cilium bootstrap artifact from controller' ansible/playbooks/bootstrap_network.yaml "${network_args[@]}"
 assert_tasks 'GitOps transaction' 'Apply GitOps controllers from controller' ansible/playbooks/bootstrap_gitops.yml -e "kubeconfig=$fixture_kubeconfig"
 
 printf 'Lifecycle entrypoint fixtures passed\n'

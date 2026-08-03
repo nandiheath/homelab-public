@@ -7,6 +7,7 @@
 ## Owned paths
 
 - `ansible/playbooks/reset.yaml`
+- `ansible/playbooks/bootstrap_network.yaml`
 - `ansible/roles/k3s_reset/tasks/preflight.yml`
 - `ansible/roles/k3s_reset/tasks/capture_host_facts.yml`
 - `ansible/roles/k3s_reset/tasks/assert_absence.yml`
@@ -14,7 +15,13 @@
 - `ansible/roles/cluster_health/tasks/main.yml`
 - `ansible/roles/k3s_server/tasks/main.yml`
 - `ansible/roles/k3s_server/defaults/main.yml`
+- `ansible/roles/k3s_server/tasks/validate_network.yml`
+- `ansible/roles/k3s_server/templates/`
+- `ansible/inventory.example.yml`
 - `tests/ansible_lifecycle/run-entrypoints.sh`
+- `tests/ansible_lifecycle/run-fixtures.sh`
+- `tests/ansible_lifecycle/k3s_network_contract.yml`
+- `tests/ansible_lifecycle/inventory.yml`
 - `docs/operations-runbook.md`
 - `skills/k3s-lifecycle/SKILL.md`
 - `tasks/running/HLP-005-clean-cluster-rebuild.md`
@@ -29,26 +36,25 @@ Update the operator runbook and lifecycle skill for the direct `v1.36.2+k3s1` in
 
 ## Acceptance criteria
 
-- Preflight records physical/serial recovery readiness, strict verified SSH pins, exact public/private revisions, controller tool versions, cluster identity, three healthy voting etcd members, API/Cilium health, and Application/PVC state before mutation.
+- Direct clean install forms exactly three healthy voting embedded-etcd members at `v1.36.2+k3s1` / `v3.6.12-k3s1`, with the exact pod/service/DNS ranges and built-in network components disabled; pre-CNI nodes may remain only `NetworkPluginNotReady`. Private Cilium then bootstraps without pre-existing pod networking or cert-manager, makes every node Ready, and GitOps restores the final TLS-enabled desired state without premature Applications/PVCs.
 - Every mutating phase requires its own exact current-session confirmation; missing, boolean, stale, wrong-version, wrong-source, wrong-target, or wrong-text inputs stop before mutation.
 - Reset preserves Ubuntu, SSH configuration and keys, hostname, users, networking, boot firmware, and retained fallback kernel while removing Kubernetes-owned state without backup inputs.
 - Kernel activation is serial, exact-package, cluster-absent, and verifies node return, pinned kernel, fallback, boot files, and K3s absence.
-- Direct clean install forms exactly three healthy voting embedded-etcd members at `v1.36.2+k3s1` / `v3.6.12-k3s1`; private Cilium and controller-only GitOps complete in order without premature Applications/PVCs.
 - Final acceptance proves node/API/Cilium health, expected GitOps health, exactly five Bound PVCs, empty smoke tests, no token/credential residue, and no backup policy.
 
 ## Verification
 
 - `source ./bin/activate-hermit && ./scripts/validate-ansible.sh`
 - `source ./bin/activate-hermit && ./scripts/validate.sh`
-- Live reset, install, cluster, router, and remote-host operations require explicit current-session authorization; the reset authorization was supplied for this attempt.
+- Live reset, install, cluster, router, and remote-host operations require explicit current-session authorization. No authorization has been supplied for another reset/reinstall or for Cilium bootstrap.
 
 ## Blockers
 
-- Clean K3s install acceptance is complete. Private Cilium bootstrap is the next live phase and requires its own fresh exact current-session confirmation before any mutation.
+- The live K3s installation remains nonconforming: it has default Flannel, kube-proxy, Traefik, ServiceLB, the default Pod CIDR, and a Service CIDR that overlaps the physical LAN. The offline install/Cilium correction and fixtures now validate successfully, but another reset/reinstall and Cilium bootstrap require fresh phase-specific current-session authorizations.
 
 ## Completion handoff
 
-- Summary: Completed and live-verified the guarded backup-free reset, interrupted-reset recovery, and direct three-server K3s install. The install validates embedded etcd from each server's local metrics endpoint, supports safe forward resumption after an interrupted serial join, waits for each joined node to become Ready, and keeps the join token in a root-only file.
-- Files changed: `ansible/playbooks/reset.yaml`; `ansible/roles/k3s_reset/defaults/main.yml`; `ansible/roles/k3s_reset/tasks/preflight.yml`; `ansible/roles/k3s_reset/tasks/capture_host_facts.yml`; `ansible/roles/k3s_reset/tasks/assert_absence.yml`; `ansible/roles/cluster_health/tasks/main.yml`; `ansible/roles/k3s_server/defaults/main.yml`; `ansible/roles/k3s_server/tasks/main.yml`; `tests/ansible_lifecycle/run-entrypoints.sh`; `tasks/running/HLP-005-clean-cluster-rebuild.md`; private `ansible/inventory/production/hosts.yml`.
-- Observed verification: Reset preservation and absence acceptance passed on all three nodes. The authorized install then completed with `0` failed and `0` unreachable hosts. Controller `/readyz` returned `ok`; all three inventory servers are Ready `control-plane,etcd` nodes at `v1.36.2+k3s1`, with unchanged addresses and the pinned `5.15.0-1105-raspi` kernel. Local metrics independently reported three unique `v3.6.12` voting etcd members, one leader, no learners, and both peer IDs active from every member. The controller kubeconfig was exported to `~/.kube/homelab-production` with mode `0600`, context `homelab`, and a working API endpoint. Public syntax, lifecycle entrypoint, Ansible, manifest, graph, private inventory, and private `make validate` checks passed. The recovery power-cycle activated the target kernel simultaneously rather than through the planned serial kernel play.
-- Follow-ups: Obtain the separate `BOOTSTRAP NETWORK homelab-production` confirmation and complete private Cilium acceptance. Then obtain the separate GitOps confirmation and prove the final Applications, PVCs, smoke tests, and credential-residue criteria.
+- Summary: The earlier authorized reset and three-server install preserved the hosts and formed healthy embedded etcd, but the legacy free-form network arguments were not passed to the K3s installer. The offline repair replaces that contract with validated role-owned Pod/Service/DNS and disabled-component arguments, pins explicit Kubernetes node identities, requires the exact pre-CNI `NetworkPluginNotReady` state, and makes Cilium bootstrap independent of pre-existing CNI, DNS, cert-manager, and GitOps. Bootstrap applies a mode-restricted temporary copy that omits only the Hubble `Certificate` and disables Hubble TLS, then verifies Cilium, node readiness, CoreDNS, DNS resolution, and zero Applications/PVCs before removing all temporary resources.
+- Files changed: `ansible/playbooks/bootstrap_network.yaml`; `ansible/roles/k3s_server/defaults/main.yml`; `ansible/roles/k3s_server/tasks/main.yml`; `ansible/roles/k3s_server/tasks/validate_network.yml`; `ansible/roles/k3s_server/templates/`; `ansible/inventory.example.yml`; `tests/ansible_lifecycle/inventory.yml`; `tests/ansible_lifecycle/k3s_network_contract.yml`; `tests/ansible_lifecycle/run-fixtures.sh`; `tests/ansible_lifecycle/run-entrypoints.sh`; `docs/operations-runbook.md`; `skills/k3s-lifecycle/SKILL.md`; `tasks/running/HLP-005-clean-cluster-rebuild.md`; private inventory, renderer, validation, Cilium source/artifact, and topology documentation.
+- Observed verification: The prior authorized reset/install completed with `0` failed and `0` unreachable hosts and produced three unique healthy `v3.6.12` voting members at K3s `v1.36.2+k3s1`; later inspection proved the installed unit omitted the intended network arguments, so that live result is not accepted as the clean-cluster network state. After the offline repair, `source ./bin/activate-hermit && ./scripts/validate-ansible.sh`, `./scripts/validate.sh`, and `./scripts/validate-repository-graph.sh ../homelab-private` all passed; private rendering and `make validate` also passed. No live cluster, router, or remote-host mutation was performed during this repair.
+- Follow-ups: Obtain a fresh exact reset confirmation and rebuild the live cluster with the corrected installer contract. Then obtain the separate network-bootstrap confirmation and prove private Cilium acceptance, followed by the separate GitOps confirmation and final Applications, PVCs, smoke-test, and credential-residue criteria.

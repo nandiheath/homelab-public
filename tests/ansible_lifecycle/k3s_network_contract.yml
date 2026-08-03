@@ -1,0 +1,15 @@
+---
+- name: Exercise K3s network validation without installer mutation
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  become: false
+  tasks:
+    - name: Validate and compose the K3s network contract
+      ansible.builtin.include_role:
+        name: k3s_server
+        tasks_from: validate_network.yml
+
+    - name: Report sentineled installer mutation boundary
+      ansible.builtin.debug:
+        msg: K3S_INSTALLER_MUTATION_SENTINEL_REACHED
