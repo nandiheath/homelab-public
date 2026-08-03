@@ -1,16 +1,35 @@
 ---
+- name: Authorize guarded K3s upgrade
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  become: false
+  vars:
+    operation_guard_source_version: "{{ upgrade_source_version | default('', true) }}"
+    operation_guard_target_version: "{{ upgrade_target_version | default('', true) }}"
+  roles:
+    - role: operation_guard
+      vars:
+        operation_guard_operation: k3s_upgrade
 
-# Servers should be restarted sequientally to avoid etcd learner issues
-# Agents have no such limitation
-- name: Upgrade K3s Servers
-  hosts: server
+- name: Upgrade secondary servers before node 0
+  hosts: "server[1:]"
+  gather_facts: false
   become: true
   serial: 1
+  any_errors_fatal: true
+  vars:
+    k3s_upgrade_target_version: "{{ upgrade_target_version }}"
   roles:
     - role: k3s_upgrade
 
-- name: Upgrade K3s Agents
-  hosts: agent
+- name: Upgrade initial server last
+  hosts: "server[0]"
+  gather_facts: false
   become: true
+  serial: 1
+  any_errors_fatal: true
+  vars:
+    k3s_upgrade_target_version: "{{ upgrade_target_version }}"
   roles:
     - role: k3s_upgrade
