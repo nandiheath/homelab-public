@@ -1,7 +1,7 @@
 # HLP-008 — Controller GitOps bootstrap
 
-- Status: planned
-- Owner: unassigned
+- Status: running
+- Owner: Main
 - Depends on: HLP-001, HLP-007
 
 ## Owned paths
