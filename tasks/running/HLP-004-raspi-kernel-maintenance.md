@@ -1,7 +1,7 @@
 # HLP-004 — Raspberry Pi kernel maintenance
 
-- Status: planned
-- Owner: unassigned
+- Status: running
+- Owner: RaspiKernel
 - Depends on: HLP-001, HLP-002
 
 ## Owned paths

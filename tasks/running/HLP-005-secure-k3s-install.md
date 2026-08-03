@@ -1,7 +1,7 @@
 # HLP-005 — Secure K3s install
 
-- Status: planned
-- Owner: unassigned
+- Status: running
+- Owner: SecureK3sInstall
 - Depends on: HLP-001, HLP-002
 
 ## Owned paths

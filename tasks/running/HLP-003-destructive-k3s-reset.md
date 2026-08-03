@@ -1,7 +1,7 @@
 # HLP-003 — Destructive K3s reset
 
-- Status: planned
-- Owner: unassigned
+- Status: running
+- Owner: DestructiveReset
 - Depends on: HLP-001, HLP-002
 
 ## Owned paths
