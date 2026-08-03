@@ -1,7 +1,7 @@
 # HLP-010 — Ansible lifecycle validation
 
-- Status: planned
-- Owner: unassigned
+- Status: running
+- Owner: Main
 - Depends on: HLP-003, HLP-004, HLP-005, HLP-006, HLP-007, HLP-008, HLP-009
 
 ## Owned paths
