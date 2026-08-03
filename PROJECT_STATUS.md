@@ -12,7 +12,7 @@ _Last observed: 2026-08-03_
 
 - `./scripts/validate.sh` completed successfully on 2026-08-02: shell and workflow linting passed; the infrastructure renderer completed; kubeconform reported 350 resources, 243 valid, 0 invalid, 0 errors, and 107 skipped schemas.
 - GitHub Actions runs the same command in `.github/workflows/render.yaml` with read-only repository permissions and no deployment step.
-- K3s installs now export a controller-local, mode-restricted kubeconfig only after the first server API is ready; `fetch_kubeconfig.yaml` reuses that export path and reset removes it once. Static lint and syntax checks, plus GitHub Actions rendering validation, passed on 2026-08-03.
+- K3s installs now export a controller-local, mode-restricted kubeconfig only after the first server API is ready; `fetch_kubeconfig.yaml` reuses that export path and reset removes it once. Static lint and syntax checks, plus GitHub Actions rendering validation, passed on 2026-08-03. Live recovery then succeeded twice against `server[0]`: the exported `homelab` context targets `https://10.43.2.1:6443` and listed all three Ready control-plane nodes.
 
 ## Rollup protocol
 
