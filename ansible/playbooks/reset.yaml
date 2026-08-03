@@ -13,10 +13,13 @@
       ansible.builtin.command:
         cmd: k3s-agent-uninstall.sh
         removes: /var/lib/rancher/k3s/*
-    - name: Remove user kubeconfig
+    - name: Remove controller kubeconfig # noqa: run-once[task]
       ansible.builtin.file:
-        path: ~{{ ansible_user }}/.kube/config
+        path: "{{ kubeconfig }}"
         state: absent
+      delegate_to: localhost
+      become: false
+      run_once: true
     - name: Remove k3s install script
       ansible.builtin.file:
         path: /usr/local/bin/k3s-install.sh

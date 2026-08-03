@@ -96,36 +96,8 @@
         token_args: "--token {{ master_token.stdout }}"
         cacheable: true
 
-    - name: Check whether kubectl is installed on control node
-      ansible.builtin.command: 'kubectl'
-      register: kubectl_installed
-      ignore_errors: true
-      delegate_to: 127.0.0.1
-      become: false
-      changed_when: false
-
-    - name: Apply K3S kubeconfig to control node
-      when: kubectl_installed.rc == 0
-      block:
-        - name: Copy kubeconfig to control node
-          ansible.builtin.fetch:
-            src: /etc/rancher/k3s/k3s.yaml
-            dest: "{{ kubeconfig }}"
-            flat: true
-
-        - name: Change server address in kubeconfig on control node
-          ansible.builtin.shell: |
-            KUBECONFIG={{ kubeconfig }} kubectl config set-cluster default --server=https://{{ api_endpoint }}:{{ api_port }}
-            KUBECONFIG={{ kubeconfig }} kubectl config rename-context default {{ cluster_context }}
-          delegate_to: 127.0.0.1
-          become: false
-          register: csa_result
-          changed_when:
-            - csa_result.rc == 0
-
-
-        - debug: msg="The kubeconfig is loaded to {{ kubeconfig }}. If it is not the default kubeconfig path, run the following command echo \"export KUBECONFIG=\"{{ kubeconfig }}:$KUBECONFIG\" > ~/.bash_rc"
-
+    - name: Export controller kubeconfig
+      ansible.builtin.include_tasks: export_kubeconfig.yml
     - name: Pause to allow first server startup
       when: (groups['server'] | length) > 1
       ansible.builtin.pause:
