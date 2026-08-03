@@ -13,15 +13,15 @@
   "rangeStrategy": "pin",
   "ignorePaths": ["artifacts/**", "credentials/**"],
   "kubernetes": {
-    "managerFilePatterns": ["/(^|/)manifests/.+\\.ya?ml$/"]
+    "managerFilePatterns": ["/(^|/)argocd/.+\\.ya?ml$/"]
   },
   "kustomize": {
-    "managerFilePatterns": ["/(^|/)manifests/.+/kustomization\\.ya?ml$/"]
+    "managerFilePatterns": ["/(^|/)argocd/.+/kustomization\\.ya?ml$/"]
   },
   "customManagers": [
     {
       "customType": "regex",
-      "managerFilePatterns": ["/^manifests\\/infrastructure\\/metallb\\/kustomization\\.yaml$/"],
+      "managerFilePatterns": ["/^argocd\\/infrastructure\\/metallb\\/kustomization\\.yaml$/"],
       "matchStrings": ["https://raw\\.githubusercontent\\.com/metallb/metallb/(?<currentValue>v[^/]+)/config/manifests/metallb-native\\.yaml"],
       "depNameTemplate": "metallb/metallb",
       "datasourceTemplate": "github-releases",
@@ -29,7 +29,7 @@
     },
     {
       "customType": "regex",
-      "managerFilePatterns": ["/^manifests\\/infrastructure\\/cnpg\\/kustomization\\.yaml$/"],
+      "managerFilePatterns": ["/^argocd\\/infrastructure\\/cnpg\\/kustomization\\.yaml$/"],
       "matchStrings": ["https://raw\\.githubusercontent\\.com/cloudnative-pg/cloudnative-pg/release-\\d+\\.\\d+/releases/cnpg-(?<currentValue>\\d+\\.\\d+\\.\\d+)\\.yaml"],
       "depNameTemplate": "cloudnative-pg/cloudnative-pg",
       "datasourceTemplate": "github-releases",
@@ -49,7 +49,7 @@
     },
     {
       "description": "Give cluster-critical releases a longer observation window",
-      "matchFileNames": ["manifests/infrastructure/**"],
+      "matchFileNames": ["argocd/infrastructure/**"],
       "minimumReleaseAge": "14 days",
       "addLabels": ["cluster-critical"]
     },

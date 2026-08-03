@@ -4,7 +4,7 @@ _Last observed: 2026-08-03_
 
 ## Current state
 
-- Public GitOps desired state lives in `manifests/infrastructure/`; committed render output lives in `artifacts/infrastructure/`.
+- Public GitOps desired state lives in `argocd/infrastructure/`; committed render output lives in `artifacts/infrastructure/`.
 - The repository contains Ansible playbooks for host operations and a Kubernetes bootstrap script. They are operational surfaces, not routine validation.
 - No agent task is active. New work begins as a path-owned document in `tasks/planned/`.
 

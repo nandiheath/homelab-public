@@ -80,17 +80,17 @@ done
 # Set render directory based on manifest type
 RENDER_DIR="artifacts/${MANIFEST_TYPE}"
 
-# Create manifests directory if it doesn't exist
-mkdir -p "manifests/${MANIFEST_TYPE}"
+# Create source directory if it doesn't exist
+mkdir -p "argocd/${MANIFEST_TYPE}"
 
 # Determine which manifests to process
 if [[ "$ALL_FLAG" == "true" ]]; then
-  manifests_list=$(list_folders manifests/${MANIFEST_TYPE}/*)
+  manifests_list=$(list_folders argocd/${MANIFEST_TYPE}/*)
 elif [[ -n "$APP_NAME" ]]; then
-  manifests_list="manifests/${MANIFEST_TYPE}/${APP_NAME}"
+  manifests_list="argocd/${MANIFEST_TYPE}/${APP_NAME}"
 else
   echo "Detecting changed manifests..."
-  manifests_list=$(changed_files "manifests/${MANIFEST_TYPE}")
+  manifests_list=$(changed_files "argocd/${MANIFEST_TYPE}")
 fi
 
 SUBSTITUTION_VARIABLES=(

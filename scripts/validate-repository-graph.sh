@@ -24,7 +24,7 @@ applications() {
 
 while IFS=$'\t' read -r name repo revision path; do
   [[ -n "$name" ]] || continue
-  [[ "$path" != manifests/* ]] || { printf '%s reads unrendered source: %s\n' "$name" "$path" >&2; exit 1; }
+  [[ "$path" != argocd/* ]] || { printf '%s reads unrendered source: %s\n' "$name" "$path" >&2; exit 1; }
   case "$name" in
     homelab-private)
       [[ "$repo" == 'https://github.com/nandiheath/homelab-private.git' && "$revision" == main && "$path" == artifacts/application/application-app-of-apps ]] || {
@@ -39,7 +39,7 @@ done < <(applications "$public_root")
 
 while IFS=$'\t' read -r name repo revision path; do
   [[ -n "$name" ]] || continue
-  [[ "$path" == artifacts/* && "$path" != manifests/* && -d "$private_root/$path" ]] || {
+  [[ "$path" == artifacts/* && "$path" != argocd/* && -d "$private_root/$path" ]] || {
     printf 'private Application %s has unresolved path %s\n' "$name" "$path" >&2; exit 1;
   }
 done < <(applications "$private_root")

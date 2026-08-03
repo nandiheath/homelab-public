@@ -4,8 +4,8 @@ set -euo pipefail
 
 # Script to create a new application with Helm chart in the project
 # This script will:
-# 1. Create a folder under manifests/infrastructure or manifests/applications with a kustomization file for a Helm chart
-# 2. Create an application definition in manifests/infrastructure/argocd-app-of-apps/apps
+# 1. Create a folder under argocd/infrastructure or argocd/applications with a kustomization file for a Helm chart
+# 2. Create an application definition in argocd/infrastructure/argocd-app-of-apps/apps
 
 # Display help message
 function show_help() {
@@ -89,13 +89,13 @@ if [ -z "${DESCRIPTION:-}" ]; then
 fi
 
 # Create directories
-SRC_DIR="manifests/${APP_TYPE}/${APP_NAME}"
+SRC_DIR="argocd/${APP_TYPE}/${APP_NAME}"
 RENDERED_DIR="artifacts/${APP_TYPE}/${APP_NAME}"
-APP_OF_APPS_DIR="manifests/${APP_TYPE}/${APP_TYPE}-app-of-apps"
+APP_OF_APPS_DIR="argocd/${APP_TYPE}/${APP_TYPE}-app-of-apps"
 
 echo "Creating application directories..."
 mkdir -p "${SRC_DIR}"
-mkdir -p "manifests/${APP_TYPE}"  # Ensure parent directory exists
+mkdir -p "argocd/${APP_TYPE}"  # Ensure parent directory exists
 
 # Create kustomization.yaml
 echo "Creating kustomization.yaml..."
@@ -147,7 +147,7 @@ fi
 
 echo "Application ${APP_NAME} created successfully!"
 echo "Source directory: ${SRC_DIR}"
-echo "Application definition: manifests/infrastructure/argocd-app-of-apps/apps/${APP_NAME}.yaml"
+echo "Application definition: argocd/infrastructure/argocd-app-of-apps/apps/${APP_NAME}.yaml"
 echo "Rendered manifests will be in: ${RENDERED_DIR}"
 echo ""
 echo "The application will be automatically picked up by the argocd-app-of-apps application."

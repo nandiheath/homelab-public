@@ -11,9 +11,9 @@
 
 ## Repository map
 
-- `manifests/infrastructure/` — kustomize source for the cluster's public desired state.
+- `argocd/infrastructure/` — kustomize source for the cluster's public desired state.
 - `artifacts/infrastructure/` — committed render output; source changes that affect it must update it.
-- `scripts/render.sh` — local renderer. It rewrites `artifacts/`.
+- `homelab render` — local renderer provided by the Hermit-managed `homelab` CLI. It rewrites `artifacts/`.
 - `scripts/validate.sh` — authoritative offline validation: actionlint, shellcheck, render, and kubeconform.
 - `ansible/` — host bootstrap and maintenance playbooks. These target real hosts when run.
 - `scripts/bootstrap.sh` — applies to a live Kubernetes cluster and reads 1Password credentials; never run without explicit user authorization.
@@ -29,12 +29,12 @@ source bin/activate-hermit
 
 `./scripts/validate.sh` uses only local tooling and writes generated files under `artifacts/`; it does not contact a cluster. Run it in the task worktree, inspect and include intended generated changes, and never run it concurrently against the same worktree.
 
-For a focused render, use `./scripts/render.sh --app <name> --infra`. It also rewrites its corresponding `artifacts/infrastructure/<name>/` directory.
+For a focused render, use `homelab render --path argocd/infrastructure/<name> --output artifacts/infrastructure/<name>`. It rewrites that output directory.
 
 ## Safety gates
 
 - Never use `kubectl`, run Ansible playbooks against non-fixture inventory, execute `scripts/bootstrap.sh`, apply manifests, deploy, publish, or mutate remote infrastructure without explicit user authorization in this conversation.
 - Do not read, add, print, or commit `credentials/`, `config/.env`, Terraform state, or other ignored secrets.
 - Preserve the public/private boundary. Cross-repository validation requires the private repository only when explicitly authorized and available.
-- Do not change generated artifacts by hand when `scripts/render.sh` can produce them.
+- Do not change generated artifacts by hand when `homelab render` can produce them.
 - Do not claim overlapping paths or edit another active task's owned paths.

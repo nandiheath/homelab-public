@@ -6,7 +6,7 @@ This repository is the public, reproducible half of a Kubernetes homelab. It dec
 
 ```mermaid
 flowchart LR
-  M[manifests/infrastructure] --> R[scripts/render.sh]
+  M[argocd/infrastructure] --> R[homelab render]
   R --> A[artifacts/infrastructure]
   A --> G[Argo CD]
   G --> K[K3s cluster]
@@ -21,9 +21,9 @@ The infrastructure root creates Argo CD Applications for Argo CD, Cilium, Extern
 
 | Path | Purpose |
 | --- | --- |
-| `manifests/infrastructure/` | Kustomize source for public cluster infrastructure. |
+| `argocd/infrastructure/` | Kustomize source for public cluster infrastructure. |
 | `artifacts/infrastructure/` | Committed, rendered Kubernetes manifests consumed by GitOps. Do not edit manually. |
-| `scripts/render.sh` | Renders selected or changed Kustomize sources into `artifacts/`. |
+| `homelab render` | Hermit-managed renderer that runs Kustomize and writes `artifacts/`. |
 | `scripts/validate.sh` | Local validation: actionlint, shellcheck, render, and kubeconform. |
 | `scripts/bootstrap.sh` | Legacy live-cluster bootstrap helper. It needs local credentials and mutates a cluster. |
 | `ansible/` | K3s node provisioning, upgrades, recovery, and GitOps bootstrap playbooks. |

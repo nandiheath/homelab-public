@@ -59,7 +59,7 @@
 
 1. Identify the exact credential, dependent controllers, expiry, owner, and rollback credential in the change record. **Placeholder:** add the approved inventory of secret owners and rotation cadence.
 2. Rotate the credential in the approved external secret system. Never add its value to Git, a task document, a PR, terminal output, or this runbook.
-3. For a 1Password Connect authentication change, have the authorized operator update the private bootstrap credential manifest. For an Argo CD GitHub App change, update the source item and properties expected by `manifests/infrastructure/bootstrap/externalsecret-argocd.yaml`.
+3. For a 1Password Connect authentication change, have the authorized operator update the private bootstrap credential manifest. For an Argo CD GitHub App change, update the source item and properties expected by `argocd/infrastructure/bootstrap/externalsecret-argocd.yaml`.
 4. Use the approved controller reconciliation method and verify the resulting Kubernetes Secret plus every dependent workload or repository connection. **Placeholder:** document the approved reconcile command and expected status fields for this environment.
 5. Retire the prior credential only after the new credential works and the rollback window closes. Record completion without recording secret values.
 

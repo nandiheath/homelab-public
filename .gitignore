@@ -8,6 +8,6 @@ credentials
 **/.terraform.tfstate.lock.info
 *.tfstate
 *.tfstate.backup
-manifests/*/*/charts
+argocd/*/*/charts
 config/.env
 ansible/collections/ansible_collections/
