@@ -6,7 +6,7 @@ _Last observed: 2026-08-03_
 
 - Public GitOps desired state lives in `argocd/infrastructure/`; committed render output lives in `artifacts/infrastructure/`.
 - The repository contains Ansible playbooks for host operations and a Kubernetes bootstrap script. They are operational surfaces, not routine validation.
-- No agent task is active. New work begins as a path-owned document in `tasks/planned/`.
+- HLP-011 is the only active public implementation task after lifecycle validation rollup; live lifecycle execution is separately blocked on verified private SSH host-key pins.
 
 ## Observed validation
 
@@ -20,6 +20,7 @@ _Last observed: 2026-08-03_
 - The guarded two-step K3s bridge upgrade passed focused production-profile `ansible-lint` and repository validation on 2026-08-03; exact source/target fixture coverage remains an HLP-010 requirement before any live upgrade.
 - Controller-local private Cilium bootstrap and Argo private-source targeting passed focused Ansible lint and repository rendering validation on 2026-08-03; live application remains blocked on verified SSH host-key pins and final fixture coverage.
 - Controller-only GitOps bootstrap passed focused Ansible lint and repository rendering validation on 2026-08-03; it has no installation import and removes controller-temporary credentials in an `always` block.
+- `./scripts/validate-ansible.sh` passed on 2026-08-03 with exact Ansible Core 2.21.2 and ansible-lint 26.6.0: 48 files linted with zero failures/warnings, every lifecycle playbook syntax-checked, and the offline authorization matrix rejected missing, boolean, stale-cluster, wrong-confirmation, and invalid bridge cases before its mutation sentinel.
 
 ## Rollup protocol
 

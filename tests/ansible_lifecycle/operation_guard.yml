@@ -1,0 +1,26 @@
+---
+- name: Exercise lifecycle operation authorization without remote mutation
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  become: false
+  roles:
+    - role: operation_guard
+      vars:
+        operation_guard_operation: "{{ lookup('ansible.builtin.env', 'FIXTURE_OPERATION') }}"
+        operation_guard_source_version: "{{ lookup('ansible.builtin.env', 'FIXTURE_SOURCE_VERSION') }}"
+        operation_guard_target_version: "{{ lookup('ansible.builtin.env', 'FIXTURE_TARGET_VERSION') }}"
+        operation_guard_confirmation: "{{ lookup('ansible.builtin.env', 'FIXTURE_CONFIRMATION') }}"
+        operation_guard_known_hosts_file: "{{ fixture_known_hosts_file }}"
+  tasks:
+    - name: Prove destructive reset has no backup contract
+      ansible.builtin.assert:
+        that:
+          - snapshot_path is not defined
+          - recovery_bundle_id is not defined
+          - backup_signer is not defined
+      when: lookup('ansible.builtin.env', 'FIXTURE_OPERATION') == 'reset'
+
+    - name: Report sentineled mutation boundary
+      ansible.builtin.debug:
+        msg: LIFECYCLE_MUTATION_SENTINEL_REACHED

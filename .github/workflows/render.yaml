@@ -32,6 +32,12 @@ jobs:
       - name: Install pinned Hermit tools
         run: ./bin/hermit install
 
+      - name: Install pinned Ansible validation tools
+        run: python3 -m pip install ansible-core==2.21.2 ansible-lint==26.6.0
+
+      - name: Validate lifecycle automation
+        run: ./scripts/validate-ansible.sh
+
       - name: Render and validate manifests
         run: ./scripts/validate.sh
 

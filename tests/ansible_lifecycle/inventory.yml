@@ -1,0 +1,35 @@
+---
+all:
+  vars:
+    cluster_id: homelab-production
+    ansible_ssh_common_args: >-
+      -o StrictHostKeyChecking=yes
+      -o UserKnownHostsFile={{ fixture_known_hosts_file }}
+    operation_guard_known_hosts_file: "{{ fixture_known_hosts_file }}"
+    k3s_install_version: v1.33.2+k3s1
+    k3s_target_version: v1.33.13+k3s1
+    kernel_running_release: 5.15.0-1105-raspi
+    k3s_releases:
+      v1.33.2+k3s1:
+        etcd_version: v3.5.21-k3s1
+        arm64_sha256: 1fa4a6a3a11c927902398b3d94a552190fa0e0957de70df38d57d5e5d8a7cde5
+      v1.33.10+k3s1:
+        etcd_version: v3.5.26-k3s1
+        arm64_sha256: b322b8045f38a77123484eb27240cf6dee1c79cbef9b47858298f71eb3c389c1
+      v1.33.13+k3s1:
+        etcd_version: v3.6.12-k3s1
+        arm64_sha256: 007652573124c2e2b581894919d595fed0b7a9b2d54c9eb956d18bc43912f12b
+  children:
+    k3s_cluster:
+      children:
+        server:
+          hosts:
+            node-0:
+              ansible_host: 192.0.2.11
+              operation_guard_pinned_ssh_host_key: "{{ fixture_host_key }}"
+            node-1:
+              ansible_host: 192.0.2.12
+              operation_guard_pinned_ssh_host_key: "{{ fixture_host_key }}"
+            node-2:
+              ansible_host: 192.0.2.13
+              operation_guard_pinned_ssh_host_key: "{{ fixture_host_key }}"
