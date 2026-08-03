@@ -29,6 +29,9 @@ jobs:
       - name: Activate pinned Hermit toolchain
         uses: cashapp/activate-hermit@cea9af7913204a965fd488637a8d1811bba2e616 # v1
 
+      - name: Install pinned Hermit tools
+        run: ./bin/hermit install
+
       - name: Render and validate manifests
         run: ./scripts/validate.sh
 
