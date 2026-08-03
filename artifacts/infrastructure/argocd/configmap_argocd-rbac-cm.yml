@@ -2,7 +2,7 @@
 apiVersion: v1
 data:
   policy.csv: |
-    g, "nandiheath", role:admin
+    g, nandiheath, role:admin
   policy.default: ""
   policy.matchMode: glob
   scopes: '[email]'
