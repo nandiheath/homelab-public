@@ -2,12 +2,13 @@
 
 ## Session protocol
 
-1. Read this guide and `PROJECT_STATUS.md`; then inspect the task document before changing files.
-2. Claim only one dependency-ready task by moving it from `tasks/planned/` to `tasks/running/`, setting `Status: running`, and recording yourself as its sole owner.
-3. Work in a dedicated worktree. A task's `Owned paths` must be disjoint from every task in `tasks/running/`.
-4. Run the focused proof in the task. Record observed output for every acceptance criterion in its completion handoff.
-5. Do not merge or delete task files. The serial rollup owner does that after integration verification, updates `PROJECT_STATUS.md`, and removes successful task documents.
-6. Apply `skills/contribution-workflow/SKILL.md` to every change. Complete a Conventional Commit and a pull request with its required description before landing work.
+1. Read this guide and `PROJECT_STATUS.md`; then inspect the parent milestone and child task before changing files.
+2. Planning creates one milestone first; every spawned task must reference that milestone and appear in its checklist. A future reminder remains a planned milestone, not a loose task.
+3. Claim only one dependency-ready task by moving it from `tasks/planned/` to `tasks/running/`, setting `Status: running`, and recording yourself as its sole owner.
+4. Work in a dedicated worktree. A task's `Owned paths` must be disjoint from every task in `tasks/running/`.
+5. Run the focused proof in the task. Record observed output for every acceptance criterion in its completion handoff.
+6. Do not merge, delete, or check off task files. The serial rollup owner integrates children, updates the milestone, runs milestone-level verification, updates `PROJECT_STATUS.md`, and removes successful contracts. A milestone is not done merely because its child tasks passed.
+7. Apply `skills/contribution-workflow/SKILL.md` to every change. Complete a Conventional Commit and a pull request with its required description before landing work.
 
 ## Repository map
 
