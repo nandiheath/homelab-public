@@ -1,0 +1,9 @@
+---
+node_maintenance_kubeconfig: ""
+node_maintenance_kubectl: kubectl
+node_maintenance_target: ""
+node_maintenance_servers: []
+node_maintenance_mode: ordinary
+node_maintenance_mutation_tasks: []
+node_maintenance_verify_tasks: []
+node_maintenance_drain_timeout_seconds: 300

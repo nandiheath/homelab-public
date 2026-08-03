@@ -15,6 +15,7 @@ _Last observed: 2026-08-03_
 - K3s installs now export a controller-local, mode-restricted kubeconfig only after the first server API is ready; `fetch_kubeconfig.yaml` reuses that export path and reset removes it once. Static lint and syntax checks, plus GitHub Actions rendering validation, passed on 2026-08-03. Live recovery then succeeded twice against `server[0]`: the exported `homelab` context targets `https://10.43.2.1:6443` and listed all three Ready control-plane nodes.
 - Public lifecycle foundations now fail closed on host-key checking, cluster/version inventory shape, exact operation confirmations, controller-tool versions, and sensitive controller file permissions. `./scripts/validate.sh` passed on 2026-08-03 (350 resources; 243 valid; 0 invalid; 0 errors).
 - Longhorn desired state and committed render now set `defaultSettings.nodeDrainPolicy: block-for-eviction`; no backup target or recurring backup policy was introduced.
+- Cluster-health and maintenance roles passed `ansible-lint` (production profile) and the repository validation suite on 2026-08-03. Fixture coverage remains a required HLP-010 gate before live lifecycle use.
 
 ## Rollup protocol
 

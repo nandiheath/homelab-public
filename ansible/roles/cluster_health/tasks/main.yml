@@ -1,0 +1,113 @@
+---
+- name: Validate health role inputs
+  ansible.builtin.assert:
+    that:
+      - cluster_health_kubeconfig is string
+      - cluster_health_kubeconfig | length > 0
+      - cluster_health_kubectl is string
+      - cluster_health_expected_servers is sequence
+      - cluster_health_expected_servers is not string
+      - cluster_health_expected_servers | length == 3
+      - cluster_health_mode in ['populated', 'bare_upgrade']
+      - cluster_health_required_controllers is sequence
+      - cluster_health_required_controllers is not string
+    fail_msg: Cluster health inputs are incomplete or unsafe.
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Read Kubernetes node state as JSON
+  ansible.builtin.command:
+    argv: ["{{ cluster_health_kubectl }}", "--kubeconfig", "{{ cluster_health_kubeconfig }}", "get", "nodes", "-o", "json"]
+  register: cluster_health_nodes_command
+  changed_when: false
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Parse Kubernetes node state
+  ansible.builtin.set_fact:
+    cluster_health_nodes: "{{ cluster_health_nodes_command.stdout | from_json }}"
+  delegate_to: localhost
+  delegate_facts: true
+  become: false
+  run_once: true
+
+- name: Require exactly expected Ready nodes
+  ansible.builtin.assert:
+    that:
+      - hostvars['localhost'].cluster_health_nodes.items | map(attribute='metadata.name') | sort == cluster_health_expected_servers | sort
+      - hostvars['localhost'].cluster_health_nodes.items | selectattr('spec.unschedulable', 'defined') | selectattr('spec.unschedulable') | list | length == 0
+      - hostvars['localhost'].cluster_health_nodes.items | selectattr('status.conditions', 'defined') | map(attribute='status.conditions') | map('selectattr', 'type', 'equalto', 'Ready') | map('selectattr', 'status', 'equalto', 'True') | map('list') | select | list | length == 3
+    fail_msg: Expected nodes are not all present, Ready, and schedulable.
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Read API readiness as text
+  ansible.builtin.command:
+    argv: ["{{ cluster_health_kubectl }}", "--kubeconfig", "{{ cluster_health_kubeconfig }}", "get", "--raw=/readyz?verbose"]
+  register: cluster_health_readyz
+  changed_when: false
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Require API and etcd readiness
+  ansible.builtin.assert:
+    that:
+      - cluster_health_readyz.rc == 0
+      - "'etcd' in cluster_health_readyz.stdout"
+      - "'ok' in (cluster_health_readyz.stdout | lower)"
+    fail_msg: Kubernetes API or embedded etcd readiness check failed.
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Read pods as JSON
+  ansible.builtin.command:
+    argv: ["{{ cluster_health_kubectl }}", "--kubeconfig", "{{ cluster_health_kubeconfig }}", "get", "pods", "-A", "-o", "json"]
+  register: cluster_health_pods_command
+  changed_when: false
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Parse pod state
+  ansible.builtin.set_fact:
+    cluster_health_pods: "{{ cluster_health_pods_command.stdout | from_json }}"
+  delegate_to: localhost
+  delegate_facts: true
+  become: false
+  run_once: true
+
+- name: Require non-terminal pods to be Ready
+  ansible.builtin.assert:
+    that:
+      - hostvars['localhost'].cluster_health_pods.items | rejectattr('status.phase', 'in', ['Succeeded', 'Failed']) | rejectattr('status.conditions', 'undefined') | map(attribute='status.conditions') | map('selectattr', 'type', 'equalto', 'Ready') | map('selectattr', 'status', 'equalto', 'True') | map('list') | select | list | length == (hostvars['localhost'].cluster_health_pods.items | rejectattr('status.phase', 'in', ['Succeeded', 'Failed']) | list | length)
+    fail_msg: A non-terminal pod is not Ready.
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Read Argo applications and persistent volume claims as JSON
+  ansible.builtin.command:
+    argv: ["{{ cluster_health_kubectl }}", "--kubeconfig", "{{ cluster_health_kubeconfig }}", "get", "{{ item }}", "-A", "-o", "json"]
+  loop: ["applications.argoproj.io", "pvc"]
+  register: cluster_health_bare_resources
+  changed_when: false
+  failed_when: false
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Require bare upgrade cluster has no applications or PVCs
+  ansible.builtin.assert:
+    that:
+      - cluster_health_bare_resources.results | map(attribute='rc') | list == [0, 0]
+      - cluster_health_bare_resources.results | map(attribute='stdout') | map('from_json') | map(attribute='items') | map('length') | list == [0, 0]
+    fail_msg: Bare upgrade cluster must contain no Argo Applications or PVCs.
+  when: cluster_health_mode == 'bare_upgrade'
+  delegate_to: localhost
+  become: false
+  run_once: true
