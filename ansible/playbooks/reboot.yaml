@@ -1,19 +1,67 @@
 ---
-- name: Reboot cluster servers staggered
-  hosts: server
-  become: true
-  gather_facts: true
-  serial: 1
-  tasks:
-    - name: Reboot
-      ansible.builtin.reboot:
-        test_command: kubectl get nodes
+- name: Authorize pinned Raspberry Pi kernel activation
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  become: false
+  roles:
+    - role: operation_guard
+      vars:
+        operation_guard_operation: kernel_activation
+        operation_guard_source_version: "{{ k3s_install_version }}"
+        operation_guard_target_version: "{{ k3s_target_version }}"
 
-- name: Reboot cluster agents staggered
-  hosts: agent
-  become: true
+- name: Reboot one verified Raspberry Pi kernel node
+  hosts: k3s_cluster
   gather_facts: true
+  become: true
   serial: 1
+  any_errors_fatal: true
+  vars:
+    raspi_kernel_release: "{{ kernel_running_release }}"
+    raspi_kernel_boot_path: /boot/firmware
+    raspi_kernel_fallback_release: 5.15.0-1102-raspi
   tasks:
-    - name: Reboot
+    - name: Reboot node after pinned kernel installation
       ansible.builtin.reboot:
+        reboot_timeout: 600
+        post_reboot_delay: 5
+    - name: Refresh kernel facts after reboot
+      ansible.builtin.setup:
+        gather_subset:
+          - kernel
+    - name: Require exact active kernel release
+      ansible.builtin.command:
+        argv: [uname, -r]
+      register: raspi_kernel_active_release
+      changed_when: false
+    - name: Assert active pinned kernel release
+      ansible.builtin.assert:
+        that:
+          - raspi_kernel_active_release.stdout == raspi_kernel_release
+          - ansible_kernel == raspi_kernel_release
+        fail_msg: Rebooted node did not activate the pinned Raspberry Pi kernel.
+    - name: Check reboot-required marker
+      ansible.builtin.stat:
+        path: /var/run/reboot-required
+      register: raspi_kernel_reboot_marker
+    - name: Require reboot-required marker to be cleared
+      ansible.builtin.assert:
+        that:
+          - not raspi_kernel_reboot_marker.stat.exists
+        fail_msg: Rebooted node still requires a reboot.
+    - name: Check expected boot files and retained fallback
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - "{{ raspi_kernel_boot_path }}/vmlinuz-{{ raspi_kernel_release }}"
+        - "{{ raspi_kernel_boot_path }}/vmlinuz-{{ raspi_kernel_fallback_release }}"
+      register: raspi_kernel_boot_files
+    - name: Require expected boot files and retained fallback
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists
+        fail_msg: Rebooted node lacks the pinned kernel or retained fallback boot file.
+      loop: "{{ raspi_kernel_boot_files.results }}"
+      loop_control:
+        label: "{{ item.item }}"

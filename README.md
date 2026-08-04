@@ -27,6 +27,7 @@ The infrastructure root creates Argo CD Applications for Argo CD, Cilium, Extern
 | `scripts/validate.sh` | Local validation: actionlint, shellcheck, render, and kubeconform. |
 | `scripts/bootstrap.sh` | Legacy live-cluster bootstrap helper. It needs local credentials and mutates a cluster. |
 | `ansible/` | K3s node provisioning, upgrades, recovery, and GitOps bootstrap playbooks. |
+| `docs/bootstrap/` | Numbered agent guide for initial host bootstrap, destructive rebuild, final acceptance, and guarded upgrades. |
 | `docs/operations-runbook.md` | Guard-railed operating procedures and explicit operational placeholders. |
 | `tasks/` | Path-owned work contracts for concurrent agents. |
 | `AGENTS.md` | Repository agent protocol and safety gates. |
@@ -45,7 +46,7 @@ Validation renders infrastructure and rewrites `artifacts/` locally. It does not
 
 ## Operations
 
-The [operations runbook](docs/operations-runbook.md) covers guarded paths for K3s upgrades, GitOps bootstrap, and secret rotation. These procedures are deliberately not routine developer commands: they require approved maintenance windows, private inventory or credential manifests, and explicit authorization before they can mutate live infrastructure.
+The [numbered bootstrap guide](docs/bootstrap/README.md) selects the safe initial-build, destructive-rebuild, or upgrade route. The [operations runbook](docs/operations-runbook.md) remains the exact authority for guarded K3s lifecycle and GitOps bootstrap commands. These procedures are deliberately not routine developer commands: they require approved maintenance windows, private inventory or credential manifests, and explicit authorization before they can mutate live infrastructure.
 
 ## Contribution
 

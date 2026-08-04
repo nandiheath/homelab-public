@@ -1,0 +1,900 @@
+---
+- name: Authorize controller-local Cilium bootstrap
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  become: false
+  vars:
+    network_kubeconfig: "{{ kubeconfig | default('', true) }}"
+    network_cilium_artifact: "{{ private_cilium_artifact | default('', true) }}"
+    network_public_cilium_artifact: "{{ public_cilium_artifact | default(playbook_dir ~ '/../../artifacts/infrastructure/cilium', true) }}"
+    network_api_endpoint: "{{ api_endpoint | default('', true) }}"
+    network_cluster_cidr: "{{ cluster_cidr | default('', true) }}"
+    network_service_cidr: "{{ service_cidr | default('', true) }}"
+    network_cluster_dns: "{{ cluster_dns | default('', true) }}"
+    network_public_api_endpoint: 192.0.2.11
+    network_public_cluster_cidr: 10.244.0.0/16
+    network_server_inventory_hosts: "{{ groups['server'] | default([]) }}"
+    network_dns_probe_image: busybox@sha256:9db7b59979c38555a39def84a31fb98b5296952f9e3afd4f6f11f05b07adfab0
+    network_service_host_pattern: '(?m)^[ \t]*-[ \t]+name:[ \t]+KUBERNETES_SERVICE_HOST[ \t]*$\n^[ \t]+value:[ \t]+"?([^"\s]+)"?[ \t]*$'
+    network_conflicting_resource_pattern: '^(kube-flannel(?:-|$)|kube-proxy(?:-|$)|traefik(?:-|$)|helm-install-traefik(?:-|$)|svclb-)'
+    network_hubble_tls_enabled_line: '  hubble-disable-tls: "false"'
+    network_hubble_tls_disabled_line: '  hubble-disable-tls: "true"'
+  pre_tasks:
+    - name: Require private Cilium bootstrap inputs
+      ansible.builtin.assert:
+        that:
+          - network_kubeconfig is string
+          - network_kubeconfig | length > 0
+          - network_cilium_artifact is string
+          - network_cilium_artifact | length > 0
+          - network_public_cilium_artifact is string
+          - network_public_cilium_artifact | length > 0
+          - network_api_endpoint is string
+          - network_api_endpoint | length > 0
+          - network_api_endpoint != network_public_api_endpoint
+          - network_cluster_cidr is string
+          - network_cluster_cidr is match('^[0-9]{1,3}(?:[.][0-9]{1,3}){3}/[0-9]{1,2}$')
+          - network_cluster_cidr != network_public_cluster_cidr
+          - network_service_cidr is string
+          - network_service_cidr is match('^[0-9]{1,3}(?:[.][0-9]{1,3}){3}/[0-9]{1,2}$')
+          - network_cluster_dns is string
+          - network_cluster_dns is match('^[0-9]{1,3}(?:[.][0-9]{1,3}){3}$')
+          - network_server_inventory_hosts is sequence
+          - network_server_inventory_hosts is not string
+          - network_server_inventory_hosts | length == 3
+          - network_dns_probe_image is match('^[a-z0-9./_-]+@sha256:[0-9a-f]{64}$')
+        fail_msg: Private Cilium artifact, declared network, endpoint, three servers, and kubeconfig are required.
+
+    - name: Require an explicit Kubernetes node name for every server
+      ansible.builtin.assert:
+        that:
+          - hostvars[item].k3s_node_name | default('') is string
+          - hostvars[item].k3s_node_name | default('') | length > 0
+        fail_msg: "Server {{ item }} must declare its exact k3s_node_name."
+      loop: "{{ network_server_inventory_hosts }}"
+      loop_control:
+        label: "{{ item }}"
+
+    - name: Build expected Kubernetes node identities
+      ansible.builtin.set_fact:
+        network_expected_nodes: "{{ network_server_inventory_hosts | map('extract', hostvars, 'k3s_node_name') | list }}"
+
+    - name: Require three unique Kubernetes node identities
+      ansible.builtin.assert:
+        that:
+          - network_expected_nodes | unique | list | length == 3
+        fail_msg: Every server must declare a unique k3s_node_name.
+  roles:
+    - role: operation_guard
+      vars:
+        operation_guard_operation: bootstrap_network
+        operation_guard_source_version: "{{ k3s_install_version }}"
+        operation_guard_target_version: "{{ k3s_target_version }}"
+        operation_guard_kubeconfig: "{{ network_kubeconfig }}"
+  tasks:
+    - name: Validate declared network ranges on controller
+      ansible.builtin.command:
+        argv:
+          - "{{ ansible_playbook_python }}"
+          - -c
+          - |
+            import ipaddress
+            import sys
+
+            cluster = ipaddress.ip_network(sys.argv[1], strict=True)
+            service = ipaddress.ip_network(sys.argv[2], strict=True)
+            dns = ipaddress.ip_address(sys.argv[3])
+            if cluster.version != 4 or service.version != 4 or dns.version != 4:
+                raise SystemExit("only IPv4 cluster networking is approved")
+            if cluster.overlaps(service):
+                raise SystemExit("cluster and service CIDRs overlap")
+            if dns not in service or dns in (service.network_address, service.broadcast_address):
+                raise SystemExit("cluster DNS is not a usable address in the service CIDR")
+          - "{{ network_cluster_cidr }}"
+          - "{{ network_service_cidr }}"
+          - "{{ network_cluster_dns }}"
+      changed_when: false
+
+    - name: Wait for Kubernetes API readiness from controller
+      ansible.builtin.command:
+        argv: ["{{ controller_kubectl }}", --kubeconfig, "{{ network_kubeconfig }}", get, '--raw=/readyz?verbose']
+      register: network_api_ready
+      changed_when: false
+      retries: 30
+      delay: 2
+      until: network_api_ready.rc == 0
+
+    - name: Read pre-CNI Kubernetes node state
+      ansible.builtin.command:
+        argv: ["{{ controller_kubectl }}", --kubeconfig, "{{ network_kubeconfig }}", get, nodes, --output=json]
+      register: network_pre_cni_nodes_command
+      changed_when: false
+
+    - name: Parse pre-CNI Kubernetes node state
+      ansible.builtin.set_fact:
+        network_pre_cni_nodes: "{{ network_pre_cni_nodes_command.stdout | from_json }}"
+
+    - name: Require exact pre-CNI node identities and versions
+      ansible.builtin.assert:
+        that:
+          - network_pre_cni_nodes['items'] | map(attribute='metadata.name') | list | sort == network_expected_nodes | sort
+          - network_pre_cni_nodes['items'] | map(attribute='status.nodeInfo.kubeletVersion') | unique | list == [k3s_target_version]
+        fail_msg: The clean cluster does not contain exactly the three inventory servers at the approved K3s version.
+
+    - name: Require one Ready condition on every pre-CNI node
+      ansible.builtin.assert:
+        that:
+          - item.status.conditions | selectattr('type', 'equalto', 'Ready') | list | length == 1
+        fail_msg: "Node {{ item.metadata.name }} does not expose one unambiguous Ready condition."
+      loop: "{{ network_pre_cni_nodes['items'] }}"
+      loop_control:
+        label: "{{ item.metadata.name }}"
+
+    - name: Reject pre-CNI node failure outside NetworkPluginNotReady
+      ansible.builtin.assert:
+        that:
+          - >-
+            network_node_ready_condition.status == 'False'
+            and network_node_ready_condition.reason == 'KubeletNotReady'
+            and 'NetworkPluginNotReady' in network_node_ready_condition.message
+        fail_msg: "Node {{ item.metadata.name }} has a pre-CNI failure unrelated to the expected missing network plugin."
+      vars:
+        network_node_ready_condition: "{{ item.status.conditions | selectattr('type', 'equalto', 'Ready') | first }}"
+      loop: "{{ network_pre_cni_nodes['items'] }}"
+      loop_control:
+        label: "{{ item.metadata.name }}"
+
+    - name: Reject Flannel node annotation evidence
+      ansible.builtin.assert:
+        that:
+          - >-
+            item.metadata.annotations
+            | default({})
+            | dict2items
+            | selectattr('key', 'match', '^flannel[.]alpha[.]coreos[.]com/')
+            | list
+            | length
+            == 0
+        fail_msg: "Node {{ item.metadata.name }} retains Flannel network annotations."
+      loop: "{{ network_pre_cni_nodes['items'] }}"
+      loop_control:
+        label: "{{ item.metadata.name }}"
+
+    - name: Collect safely observable live pod CIDRs
+      ansible.builtin.set_fact:
+        network_live_pod_cidrs: >-
+          {{
+            network_live_pod_cidrs | default([])
+            + (
+              item.spec.podCIDRs
+              | default(([item.spec.podCIDR] if item.spec.podCIDR is defined else []), true)
+            )
+          }}
+      loop: "{{ network_pre_cni_nodes['items'] }}"
+      loop_control:
+        label: "{{ item.metadata.name }}"
+
+    - name: Require live pod CIDRs to belong to the declared cluster CIDR
+      ansible.builtin.command:
+        argv:
+          - "{{ ansible_playbook_python }}"
+          - -c
+          - |
+            import ipaddress
+            import json
+            import sys
+
+            expected = ipaddress.ip_network(sys.argv[1], strict=True)
+            observed = json.loads(sys.argv[2])
+            invalid = [
+                value
+                for value in observed
+                if not ipaddress.ip_network(value, strict=False).subnet_of(expected)
+            ]
+            if invalid:
+                raise SystemExit("pod CIDRs outside declared cluster CIDR: " + ", ".join(invalid))
+          - "{{ network_cluster_cidr }}"
+          - "{{ network_live_pod_cidrs | unique | list | to_json }}"
+      changed_when: false
+      when: network_live_pod_cidrs | length > 0
+
+    - name: Read packaged networking and ingress evidence
+      ansible.builtin.command:
+        argv:
+          - "{{ controller_kubectl }}"
+          - --kubeconfig
+          - "{{ network_kubeconfig }}"
+          - get
+          - pods,services,daemonsets,deployments,jobs
+          - --all-namespaces
+          - --output=json
+      register: network_cluster_resource_command
+      changed_when: false
+
+    - name: Initialize conflicting resource evidence
+      ansible.builtin.set_fact:
+        network_conflicting_resources: []
+
+    - name: Collect conflicting default K3s resource evidence
+      ansible.builtin.set_fact:
+        network_conflicting_resources: >-
+          {{
+            network_conflicting_resources
+            + [
+              item.kind ~ '/'
+              ~ (item.metadata.namespace | default('_cluster'))
+              ~ '/'
+              ~ item.metadata.name
+            ]
+          }}
+      when: item.metadata.name is match(network_conflicting_resource_pattern)
+      loop: "{{ (network_cluster_resource_command.stdout | from_json)['items'] }}"
+      loop_control:
+        label: "{{ item.kind }}/{{ item.metadata.name }}"
+
+    - name: Discover the K3s HelmChart API
+      ansible.builtin.command:
+        argv: ["{{ controller_kubectl }}", --kubeconfig, "{{ network_kubeconfig }}", api-resources, --api-group=helm.cattle.io, --output=name]
+      register: network_helm_api_resources_command
+      changed_when: false
+
+    - name: Read packaged HelmChart evidence
+      ansible.builtin.command:
+        argv: ["{{ controller_kubectl }}", --kubeconfig, "{{ network_kubeconfig }}", get, helmcharts.helm.cattle.io, --all-namespaces, --output=json]
+      register: network_helm_chart_command
+      changed_when: false
+      when: "'helmcharts.helm.cattle.io' in network_helm_api_resources_command.stdout_lines"
+
+    - name: Collect conflicting packaged HelmChart evidence
+      ansible.builtin.set_fact:
+        network_conflicting_resources: >-
+          {{
+            network_conflicting_resources
+            + [
+              item.kind ~ '/'
+              ~ (item.metadata.namespace | default('_cluster'))
+              ~ '/'
+              ~ item.metadata.name
+            ]
+          }}
+      when:
+        - "'helmcharts.helm.cattle.io' in network_helm_api_resources_command.stdout_lines"
+        - item.metadata.name is match('^traefik(?:-|$)')
+      loop: >-
+        {{
+          (network_helm_chart_command.stdout | from_json)['items']
+          if 'helmcharts.helm.cattle.io' in network_helm_api_resources_command.stdout_lines
+          else []
+        }}
+      loop_control:
+        label: "{{ item.kind }}/{{ item.metadata.name }}"
+
+    - name: Reject default K3s networking and packaged ingress evidence
+      ansible.builtin.assert:
+        that:
+          - network_conflicting_resources | length == 0
+        fail_msg: "Conflicting Flannel, kube-proxy, packaged Traefik, or ServiceLB resources exist: {{ network_conflicting_resources | join(', ') }}"
+
+    - name: Read the Kubernetes API service
+      ansible.builtin.command:
+        argv: ["{{ controller_kubectl }}", --kubeconfig, "{{ network_kubeconfig }}", -n, default, get, service, kubernetes, --output=json]
+      register: network_kubernetes_service_command
+      changed_when: false
+
+    - name: Require the Kubernetes API service IP in the declared service CIDR
+      ansible.builtin.command:
+        argv:
+          - "{{ ansible_playbook_python }}"
+          - -c
+          - |
+            import ipaddress
+            import sys
+
+            if ipaddress.ip_address(sys.argv[1]) not in ipaddress.ip_network(sys.argv[2], strict=True):
+                raise SystemExit("Kubernetes API service IP is outside the declared service CIDR")
+          - "{{ (network_kubernetes_service_command.stdout | from_json).spec.clusterIP }}"
+          - "{{ network_service_cidr }}"
+      changed_when: false
+
+    - name: Discover the ServiceCIDR API
+      ansible.builtin.command:
+        argv: ["{{ controller_kubectl }}", --kubeconfig, "{{ network_kubeconfig }}", api-resources, --api-group=networking.k8s.io, --output=name]
+      register: network_api_resources_command
+      changed_when: false
+
+    - name: Read safely observable live service CIDRs
+      ansible.builtin.command:
+        argv: ["{{ controller_kubectl }}", --kubeconfig, "{{ network_kubeconfig }}", get, servicecidrs.networking.k8s.io, --output=json]
+      register: network_service_cidrs_command
+      changed_when: false
+      when: "'servicecidrs.networking.k8s.io' in network_api_resources_command.stdout_lines"
+
+    - name: Require the exact declared live service CIDR
+      ansible.builtin.assert:
+        that:
+          - >-
+            (network_service_cidrs_command.stdout | from_json)['items']
+            | map(attribute='spec.cidrs')
+            | flatten
+            | unique
+            | list
+            == [network_service_cidr]
+        fail_msg: The live ServiceCIDR API does not match the declared service CIDR.
+      when: "'servicecidrs.networking.k8s.io' in network_api_resources_command.stdout_lines"
+
+    - name: Discover the Argo Application API before Cilium
+      ansible.builtin.command:
+        argv: ["{{ controller_kubectl }}", --kubeconfig, "{{ network_kubeconfig }}", api-resources, --api-group=argoproj.io, --output=name]
+      register: network_pre_cilium_argocd_api_command
+      changed_when: false
+
+    - name: Read Applications before Cilium when the API exists
+      ansible.builtin.command:
+        argv: ["{{ controller_kubectl }}", --kubeconfig, "{{ network_kubeconfig }}", get, applications.argoproj.io, --all-namespaces, --output=json]
+      register: network_pre_cilium_applications_command
+      changed_when: false
+      when: "'applications.argoproj.io' in network_pre_cilium_argocd_api_command.stdout_lines"
+
+    - name: Require zero Applications before Cilium
+      ansible.builtin.assert:
+        that:
+          - (network_pre_cilium_applications_command.stdout | from_json)['items'] | length == 0
+        fail_msg: Cilium bootstrap requires zero pre-existing Argo Applications.
+      when: "'applications.argoproj.io' in network_pre_cilium_argocd_api_command.stdout_lines"
+
+    - name: Read PVCs before Cilium
+      ansible.builtin.command:
+        argv: ["{{ controller_kubectl }}", --kubeconfig, "{{ network_kubeconfig }}", get, persistentvolumeclaims, --all-namespaces, --output=json]
+      register: network_pre_cilium_pvcs_command
+      changed_when: false
+
+    - name: Require zero PVCs before Cilium
+      ansible.builtin.assert:
+        that:
+          - (network_pre_cilium_pvcs_command.stdout | from_json)['items'] | length == 0
+        fail_msg: Cilium bootstrap requires zero pre-existing PVCs.
+
+    - name: Find public Cilium artifact files on controller
+      ansible.builtin.find:
+        paths: "{{ network_public_cilium_artifact }}"
+        recurse: true
+        file_type: file
+      register: network_public_cilium_file_list
+
+    - name: Find private Cilium artifact files on controller
+      ansible.builtin.find:
+        paths: "{{ network_cilium_artifact }}"
+        recurse: true
+        file_type: file
+      register: network_private_cilium_file_list
+
+    - name: Require public and private Cilium artifact files
+      ansible.builtin.assert:
+        that:
+          - network_public_cilium_file_list.files | length > 0
+          - network_private_cilium_file_list.files | length > 0
+        fail_msg: Public and private Cilium artifact paths must contain files.
+
+    - name: Read public Cilium artifact files on controller
+      ansible.builtin.slurp:
+        src: "{{ item.path }}"
+      loop: "{{ network_public_cilium_file_list.files }}"
+      loop_control:
+        label: "{{ item.path | basename }}"
+      register: network_public_cilium_contents
+
+    - name: Read private Cilium artifact files on controller
+      ansible.builtin.slurp:
+        src: "{{ item.path }}"
+      loop: "{{ network_private_cilium_file_list.files }}"
+      loop_control:
+        label: "{{ item.path | basename }}"
+      register: network_private_cilium_contents
+
+    - name: Initialize Cilium artifact content maps
+      ansible.builtin.set_fact:
+        network_public_cilium_files: {}
+        network_private_cilium_files: {}
+        network_private_cilium_resources: {}
+
+    - name: Build public Cilium artifact content map
+      ansible.builtin.set_fact:
+        network_public_cilium_files: >-
+          {{
+            network_public_cilium_files | combine({
+              (item.source | basename): (item.content | b64decode)
+            })
+          }}
+      loop: "{{ network_public_cilium_contents.results }}"
+      loop_control:
+        label: "{{ item.source | basename }}"
+
+    - name: Build private Cilium artifact maps
+      ansible.builtin.set_fact:
+        network_private_cilium_files: >-
+          {{
+            network_private_cilium_files | combine({
+              (item.source | basename): (item.content | b64decode)
+            })
+          }}
+        network_private_cilium_resources: >-
+          {{
+            network_private_cilium_resources | combine({
+              (item.source | basename): (item.content | b64decode | from_yaml)
+            })
+          }}
+      loop: "{{ network_private_cilium_contents.results }}"
+      loop_control:
+        label: "{{ item.source | basename }}"
+
+    - name: Extract final Cilium artifact substitutions
+      ansible.builtin.set_fact:
+        network_public_service_host_values: >-
+          {{
+            network_public_cilium_files.values()
+            | map('regex_findall', network_service_host_pattern)
+            | flatten
+          }}
+        network_private_service_host_values: >-
+          {{
+            network_private_cilium_files.values()
+            | map('regex_findall', network_service_host_pattern)
+            | flatten
+          }}
+        network_public_cluster_cidr_matches: >-
+          {{
+            network_public_cilium_files.values()
+            | map('regex_findall', network_public_cluster_cidr | regex_escape)
+            | flatten
+          }}
+        network_private_cluster_cidr_matches: >-
+          {{
+            network_private_cilium_files.values()
+            | map('regex_findall', network_cluster_cidr | regex_escape)
+            | flatten
+          }}
+        network_private_public_endpoint_matches: >-
+          {{
+            network_private_cilium_files.values()
+            | map('regex_findall', network_public_api_endpoint | regex_escape)
+            | flatten
+          }}
+        network_private_public_cluster_cidr_matches: >-
+          {{
+            network_private_cilium_files.values()
+            | map('regex_findall', network_public_cluster_cidr | regex_escape)
+            | flatten
+          }}
+
+    - name: Require exact final Cilium artifact substitutions
+      ansible.builtin.assert:
+        that:
+          - network_public_cilium_files.keys() | list | sort == network_private_cilium_files.keys() | list | sort
+          - network_public_service_host_values | length == 5
+          - network_public_service_host_values | select('equalto', network_public_api_endpoint) | list | length == 5
+          - network_private_service_host_values | length == 5
+          - network_private_service_host_values | select('equalto', network_api_endpoint) | list | length == 5
+          - network_private_public_endpoint_matches | length == 0
+          - network_public_cluster_cidr_matches | length == 1
+          - network_private_cluster_cidr_matches | length == 1
+          - network_private_public_cluster_cidr_matches | length == 0
+        fail_msg: Private Cilium must contain exactly five private API endpoint substitutions and the declared cluster CIDR substitution.
+
+    - name: Require final private Cilium files match public source except declared substitutions
+      ansible.builtin.assert:
+        that:
+          - >-
+            network_private_cilium_files[item]
+            == (
+              network_public_cilium_files[item]
+              | replace(network_public_api_endpoint, network_api_endpoint)
+              | replace(network_public_cluster_cidr, network_cluster_cidr)
+            )
+        fail_msg: "Private Cilium file {{ item }} differs from public source beyond the approved endpoint and cluster CIDR substitutions."
+      loop: "{{ network_public_cilium_files.keys() | list }}"
+      loop_control:
+        label: "{{ item }}"
+
+    - name: Initialize Cilium bootstrap resource classifications
+      ansible.builtin.set_fact:
+        network_cert_manager_resource_files: []
+        network_hubble_certificate_files: []
+        network_cilium_config_files: []
+
+    - name: Identify cert-manager resources in final Cilium artifact
+      ansible.builtin.set_fact:
+        network_cert_manager_resource_files: "{{ network_cert_manager_resource_files + [item.key] }}"
+      when: item.value.apiVersion | default('') is match('^cert-manager[.]io/')
+      loop: "{{ network_private_cilium_resources | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
+
+    - name: Identify the Hubble server Certificate in final Cilium artifact
+      ansible.builtin.set_fact:
+        network_hubble_certificate_files: "{{ network_hubble_certificate_files + [item.key] }}"
+      when:
+        - item.value.apiVersion | default('') == 'cert-manager.io/v1'
+        - item.value.kind | default('') == 'Certificate'
+        - item.value.metadata.name | default('') == 'hubble-server-certs'
+        - item.value.metadata.namespace | default('') == 'kube-system'
+      loop: "{{ network_private_cilium_resources | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
+
+    - name: Identify the Cilium ConfigMap in final Cilium artifact
+      ansible.builtin.set_fact:
+        network_cilium_config_files: "{{ network_cilium_config_files + [item.key] }}"
+      when:
+        - item.value.apiVersion | default('') == 'v1'
+        - item.value.kind | default('') == 'ConfigMap'
+        - item.value.metadata.name | default('') == 'cilium-config'
+        - item.value.metadata.namespace | default('') == 'kube-system'
+      loop: "{{ network_private_cilium_resources | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
+
+    - name: Require the exact bootstrap dependency and Hubble TLS source
+      ansible.builtin.assert:
+        that:
+          - network_cert_manager_resource_files | length == 1
+          - network_hubble_certificate_files | length == 1
+          - network_cert_manager_resource_files == network_hubble_certificate_files
+          - network_cilium_config_files | length == 1
+          - >-
+            network_private_cilium_files.values()
+            | map('regex_findall', network_hubble_tls_enabled_line | regex_escape)
+            | flatten
+            | length
+            == 1
+          - >-
+            network_private_cilium_files.values()
+            | map('regex_findall', network_hubble_tls_disabled_line | regex_escape)
+            | flatten
+            | length
+            == 0
+        fail_msg: Final Cilium artifact does not contain exactly the expected Hubble Certificate and TLS-enabled Cilium ConfigMap.
+
+    - name: Apply Cilium through a dependency-free temporary artifact
+      block:
+        - name: Create controller-only Cilium bootstrap directory
+          ansible.builtin.tempfile:
+            state: directory
+            prefix: cilium-bootstrap-
+          register: network_bootstrap_artifact
+
+        - name: Restrict controller-only Cilium bootstrap directory
+          ansible.builtin.file:
+            path: "{{ network_bootstrap_artifact.path }}"
+            state: directory
+            mode: "0700"
+
+        - name: Write dependency-free Cilium bootstrap files
+          ansible.builtin.copy:
+            dest: "{{ network_bootstrap_artifact.path }}/{{ item.key }}"
+            content: >-
+              {{
+                item.value
+                | replace(network_hubble_tls_enabled_line, network_hubble_tls_disabled_line)
+                if item.key in network_cilium_config_files
+                else item.value
+              }}
+            mode: "0600"
+          when: item.key not in network_hubble_certificate_files
+          loop: "{{ network_private_cilium_files | dict2items }}"
+          loop_control:
+            label: "{{ item.key }}"
+
+        - name: Find temporary Cilium bootstrap files
+          ansible.builtin.find:
+            paths: "{{ network_bootstrap_artifact.path }}"
+            recurse: false
+            file_type: file
+          register: network_temporary_cilium_file_list
+
+        - name: Read temporary Cilium bootstrap files
+          ansible.builtin.slurp:
+            src: "{{ item.path }}"
+          loop: "{{ network_temporary_cilium_file_list.files }}"
+          loop_control:
+            label: "{{ item.path | basename }}"
+          register: network_temporary_cilium_contents
+
+        - name: Initialize temporary Cilium artifact content map
+          ansible.builtin.set_fact:
+            network_temporary_cilium_files: {}
+
+        - name: Build temporary Cilium artifact content map
+          ansible.builtin.set_fact:
+            network_temporary_cilium_files: >-
+              {{
+                network_temporary_cilium_files | combine({
+                  (item.source | basename): (item.content | b64decode)
+                })
+              }}
+          loop: "{{ network_temporary_cilium_contents.results }}"
+          loop_control:
+            label: "{{ item.source | basename }}"
+
+        - name: Initialize temporary Cilium transformation evidence
+          ansible.builtin.set_fact:
+            network_temporary_changed_files: []
+
+        - name: Collect temporary Cilium transformation evidence
+          ansible.builtin.set_fact:
+            network_temporary_changed_files: "{{ network_temporary_changed_files + [item] }}"
+          when: network_temporary_cilium_files[item] != network_private_cilium_files[item]
+          loop: "{{ network_temporary_cilium_files.keys() | list }}"
+          loop_control:
+            label: "{{ item }}"
+
+        - name: Assert dependency-free temporary Cilium artifact boundary
+          ansible.builtin.assert:
+            that:
+              - network_temporary_cilium_file_list.files | length == network_private_cilium_files | length - 1
+              - network_temporary_cilium_file_list.files | map(attribute='mode') | unique | list == ['0600']
+              - >-
+                network_temporary_cilium_files.keys() | list | sort
+                == network_private_cilium_files.keys() | difference(network_hubble_certificate_files) | sort
+              - network_temporary_changed_files | sort == network_cilium_config_files | sort
+              - >-
+                network_temporary_cilium_files.values()
+                | map('regex_findall', 'cert-manager[.]io/')
+                | flatten
+                | length
+                == 0
+              - >-
+                network_temporary_cilium_files.values()
+                | map('regex_findall', network_hubble_tls_enabled_line | regex_escape)
+                | flatten
+                | length
+                == 0
+              - >-
+                network_temporary_cilium_files.values()
+                | map('regex_findall', network_hubble_tls_disabled_line | regex_escape)
+                | flatten
+                | length
+                == 1
+            fail_msg: Temporary Cilium artifact did not remove exactly the Hubble Certificate and patch only Hubble TLS.
+
+        - name: Assert every temporary Cilium file has the exact expected content
+          ansible.builtin.assert:
+            that:
+              - >-
+                network_temporary_cilium_files[item]
+                == (
+                  network_private_cilium_files[item]
+                  | replace(network_hubble_tls_enabled_line, network_hubble_tls_disabled_line)
+                  if item in network_cilium_config_files
+                  else network_private_cilium_files[item]
+                )
+            fail_msg: "Temporary Cilium file {{ item }} contains an unapproved transformation."
+          loop: "{{ network_temporary_cilium_files.keys() | list }}"
+          loop_control:
+            label: "{{ item }}"
+
+        - name: Apply temporary Cilium bootstrap artifact from controller
+          ansible.builtin.command:
+            argv: ["{{ controller_kubectl }}", --kubeconfig, "{{ network_kubeconfig }}", apply, -f, "{{ network_bootstrap_artifact.path }}"]
+          changed_when: true
+
+        - name: Wait for Cilium agent rollout from controller
+          ansible.builtin.command:
+            argv: ["{{ controller_kubectl }}", --kubeconfig, "{{ network_kubeconfig }}", -n, kube-system, rollout, status, daemonset/cilium, --timeout=10m]
+          changed_when: false
+
+        - name: Wait for Cilium Envoy rollout from controller
+          ansible.builtin.command:
+            argv: ["{{ controller_kubectl }}", --kubeconfig, "{{ network_kubeconfig }}", -n, kube-system, rollout, status, daemonset/cilium-envoy, --timeout=10m]
+          changed_when: false
+
+        - name: Wait for Cilium operator rollout from controller
+          ansible.builtin.command:
+            argv: ["{{ controller_kubectl }}", --kubeconfig, "{{ network_kubeconfig }}", -n, kube-system, rollout, status, deployment/cilium-operator, --timeout=10m]
+          changed_when: false
+
+        - name: Read Cilium operator replica state
+          ansible.builtin.command:
+            argv: ["{{ controller_kubectl }}", --kubeconfig, "{{ network_kubeconfig }}", -n, kube-system, get, deployment, cilium-operator, --output=json]
+          register: network_cilium_operator_command
+          changed_when: false
+
+        - name: Require both Cilium operator replicas
+          ansible.builtin.assert:
+            that:
+              - (network_cilium_operator_command.stdout | from_json).spec.replicas == 2
+              - (network_cilium_operator_command.stdout | from_json).status.updatedReplicas | default(0) == 2
+              - (network_cilium_operator_command.stdout | from_json).status.readyReplicas | default(0) == 2
+              - (network_cilium_operator_command.stdout | from_json).status.availableReplicas | default(0) == 2
+            fail_msg: Both Cilium operator replicas are not updated, Ready, and available.
+
+        - name: Wait for every Kubernetes node to become Ready after Cilium
+          ansible.builtin.command:
+            argv: ["{{ controller_kubectl }}", --kubeconfig, "{{ network_kubeconfig }}", wait, --for=condition=Ready, nodes, --all, --timeout=10m]
+          changed_when: false
+
+        - name: Read Cilium agent pod names
+          ansible.builtin.command:
+            argv: ["{{ controller_kubectl }}", --kubeconfig, "{{ network_kubeconfig }}", -n, kube-system, get, pods, --selector=k8s-app=cilium, --output=name]
+          register: network_cilium_pods_command
+          changed_when: false
+
+        - name: Require one Cilium agent pod per expected node
+          ansible.builtin.assert:
+            that:
+              - network_cilium_pods_command.stdout_lines | length == network_expected_nodes | length
+            fail_msg: Cilium does not have exactly one agent pod per expected node.
+
+        - name: Verify Cilium status from every agent
+          ansible.builtin.command:
+            argv:
+              - "{{ controller_kubectl }}"
+              - --kubeconfig
+              - "{{ network_kubeconfig }}"
+              - -n
+              - kube-system
+              - exec
+              - "{{ item }}"
+              - --
+              - cilium-dbg
+              - status
+              - --brief
+          register: network_cilium_status
+          changed_when: false
+          retries: 30
+          delay: 10
+          until:
+            - network_cilium_status.rc == 0
+            - network_cilium_status.stdout | trim == 'OK'
+          loop: "{{ network_cilium_pods_command.stdout_lines }}"
+          loop_control:
+            label: "{{ item }}"
+
+        - name: Wait for CoreDNS rollout after Cilium
+          ansible.builtin.command:
+            argv: ["{{ controller_kubectl }}", --kubeconfig, "{{ network_kubeconfig }}", -n, kube-system, rollout, status, deployment/coredns, --timeout=10m]
+          changed_when: false
+
+        - name: Read the cluster DNS service
+          ansible.builtin.command:
+            argv: ["{{ controller_kubectl }}", --kubeconfig, "{{ network_kubeconfig }}", -n, kube-system, get, service, kube-dns, --output=json]
+          register: network_dns_service_command
+          changed_when: false
+
+        - name: Require the declared cluster DNS service address
+          ansible.builtin.assert:
+            that:
+              - (network_dns_service_command.stdout | from_json).spec.clusterIP == network_cluster_dns
+            fail_msg: kube-dns does not use the declared cluster DNS address.
+
+        - name: Build unique DNS probe name
+          ansible.builtin.set_fact:
+            network_dns_probe_name: "cilium-bootstrap-dns-{{ (network_bootstrap_artifact.path | hash('sha1'))[0:12] }}"
+
+        - name: Verify cluster DNS with a temporary immutable probe
+          block:
+            - name: Create temporary DNS probe pod
+              ansible.builtin.command:
+                argv:
+                  - "{{ controller_kubectl }}"
+                  - --kubeconfig
+                  - "{{ network_kubeconfig }}"
+                  - -n
+                  - kube-system
+                  - run
+                  - "{{ network_dns_probe_name }}"
+                  - "--image={{ network_dns_probe_image }}"
+                  - --image-pull-policy=IfNotPresent
+                  - --restart=Never
+                  - --labels=app.kubernetes.io/name=cilium-bootstrap-dns-probe
+                  - --command
+                  - --
+                  - nslookup
+                  - kubernetes.default.svc.cluster.local
+              changed_when: true
+
+            - name: Wait for temporary DNS probe success
+              ansible.builtin.command:
+                argv:
+                  - "{{ controller_kubectl }}"
+                  - --kubeconfig
+                  - "{{ network_kubeconfig }}"
+                  - -n
+                  - kube-system
+                  - wait
+                  - "--for=jsonpath={.status.phase}=Succeeded"
+                  - "pod/{{ network_dns_probe_name }}"
+                  - --timeout=5m
+              changed_when: false
+
+            - name: Read temporary DNS probe evidence
+              ansible.builtin.command:
+                argv: ["{{ controller_kubectl }}", --kubeconfig, "{{ network_kubeconfig }}", -n, kube-system, logs, "pod/{{ network_dns_probe_name }}"]
+              register: network_dns_probe_logs
+              changed_when: false
+
+            - name: Require resolved Kubernetes service DNS evidence
+              ansible.builtin.assert:
+                that:
+                  - "'kubernetes.default.svc.cluster.local' in network_dns_probe_logs.stdout"
+                  - "network_cluster_dns in network_dns_probe_logs.stdout"
+                  - "(network_kubernetes_service_command.stdout | from_json).spec.clusterIP in network_dns_probe_logs.stdout"
+                fail_msg: The temporary probe did not resolve the Kubernetes service through the declared cluster DNS.
+          always:
+            - name: Remove temporary DNS probe pod
+              ansible.builtin.command:
+                argv:
+                  - "{{ controller_kubectl }}"
+                  - --kubeconfig
+                  - "{{ network_kubeconfig }}"
+                  - -n
+                  - kube-system
+                  - delete
+                  - pod
+                  - "{{ network_dns_probe_name }}"
+                  - --ignore-not-found=true
+                  - --wait=true
+                  - --timeout=2m
+              changed_when: true
+
+            - name: Confirm temporary DNS probe removal
+              ansible.builtin.command:
+                argv:
+                  - "{{ controller_kubectl }}"
+                  - --kubeconfig
+                  - "{{ network_kubeconfig }}"
+                  - -n
+                  - kube-system
+                  - get
+                  - pod
+                  - "{{ network_dns_probe_name }}"
+                  - --ignore-not-found
+                  - --output=name
+              register: network_dns_probe_absence
+              changed_when: false
+
+            - name: Require temporary DNS probe absence
+              ansible.builtin.assert:
+                that:
+                  - network_dns_probe_absence.stdout | length == 0
+                fail_msg: Temporary DNS probe pod was not removed.
+        - name: Rediscover the Argo Application API after Cilium
+          ansible.builtin.command:
+            argv: ["{{ controller_kubectl }}", --kubeconfig, "{{ network_kubeconfig }}", api-resources, --api-group=argoproj.io, --output=name]
+          register: network_post_cilium_argocd_api_command
+          changed_when: false
+
+        - name: Read Applications after Cilium when the API exists
+          ansible.builtin.command:
+            argv: ["{{ controller_kubectl }}", --kubeconfig, "{{ network_kubeconfig }}", get, applications.argoproj.io, --all-namespaces, --output=json]
+          register: network_post_cilium_applications_command
+          changed_when: false
+          when: "'applications.argoproj.io' in network_post_cilium_argocd_api_command.stdout_lines"
+
+        - name: Require zero Applications after Cilium
+          ansible.builtin.assert:
+            that:
+              - (network_post_cilium_applications_command.stdout | from_json)['items'] | length == 0
+            fail_msg: Cilium bootstrap created or allowed premature Argo Applications.
+          when: "'applications.argoproj.io' in network_post_cilium_argocd_api_command.stdout_lines"
+
+        - name: Read PVCs after Cilium
+          ansible.builtin.command:
+            argv: ["{{ controller_kubectl }}", --kubeconfig, "{{ network_kubeconfig }}", get, persistentvolumeclaims, --all-namespaces, --output=json]
+          register: network_post_cilium_pvcs_command
+          changed_when: false
+
+        - name: Require zero PVCs after Cilium
+          ansible.builtin.assert:
+            that:
+              - (network_post_cilium_pvcs_command.stdout | from_json)['items'] | length == 0
+            fail_msg: Cilium bootstrap created or allowed premature PVCs.
+
+      always:
+        - name: Remove controller-only Cilium bootstrap artifact
+          ansible.builtin.file:
+            path: "{{ network_bootstrap_artifact.path }}"
+            state: absent
+          when:
+            - network_bootstrap_artifact is defined
+            - network_bootstrap_artifact.path is defined

@@ -1,138 +1,526 @@
 ---
-- name: Get k3s installed version
-  ansible.builtin.command: k3s --version
-  register: k3s_version_output
-  changed_when: false
-  ignore_errors: true
+- name: Validate clean K3s server install inputs
+  ansible.builtin.assert:
+    that:
+      - groups['server'] | length == 3
+      - k3s_install_version is string
+      - k3s_releases[k3s_install_version] is defined
+      - k3s_install_script_sha256 is match('^[0-9a-f]{64}$')
+      - k3s_releases[k3s_install_version].arm64_sha256 is match('^[0-9a-f]{64}$')
+      - k3s_server_controller_token_file is string
+      - k3s_server_controller_token_file | length > 0
+      - k3s_server_controller_kubeconfig_file is string
+      - k3s_server_controller_kubeconfig_file | length > 0
+      - k3s_server_token_file is string
+      - k3s_server_token_file | length > 0
+      - k3s_server_api_endpoint is string
+      - k3s_server_api_endpoint | length > 0
+      - k3s_node_name is string
+      - k3s_node_name | length > 0
+      - ansible_hostname == k3s_node_name
+      - >-
+        groups['server']
+        | map('extract', hostvars, 'k3s_node_name')
+        | select('string') | list | length
+        == groups['server'] | length
+      - >-
+        groups['server']
+        | map('extract', hostvars, 'k3s_node_name')
+        | reject('equalto', '') | list | length
+        == groups['server'] | length
+      - >-
+        groups['server']
+        | map('extract', hostvars, 'k3s_node_name')
+        | unique | list | length
+        == groups['server'] | length
+    fail_msg: Pinned three-server installation inputs, node identities, or secret staging paths are incomplete.
 
-- name: Set k3s installed version
-  when: k3s_version_output.rc == 0
+- name: Validate and compose the K3s server network contract
+  ansible.builtin.include_tasks: validate_network.yml
+
+- name: Derive the expected identity for this ordered server
   ansible.builtin.set_fact:
-    installed_k3s_version: "{{ k3s_version_output.stdout_lines[0].split(' ')[2] }}"
+    k3s_server_expected_node_name: "{{ k3s_node_name }}"
+    k3s_server_expected_member_names: >-
+      {{ groups['server']
+         | map('extract', hostvars, 'k3s_node_name')
+         | list }}
+    k3s_server_expected_etcd_version: >-
+      {{ k3s_releases[k3s_install_version].etcd_version
+         | regex_replace('^v', '')
+         | regex_replace('-k3s[0-9]+$', '') }}
+    k3s_server_expected_member_count: "{{ groups['server'].index(inventory_hostname) + 1 }}"
 
-# If airgapped, all K3s artifacts are already on the node.
-# We should be downloading and installing the newer version only if we are in one of the following cases :
-#   - we couldn't get k3s installed version in the first task of this role
-#   - the installed version of K3s on the nodes is older than the requested version in ansible vars
-- name: Download artifact only if needed
-  when: k3s_version_output.rc != 0 or installed_k3s_version is version(k3s_version, '<') and airgap_dir is undefined
-  block:
-    - name: Download K3s install script
-      ansible.builtin.get_url:
-        url: https://get.k3s.io/
-        timeout: 120
-        dest: /usr/local/bin/k3s-install.sh
-        owner: root
-        group: root
-        mode: "0755"
+- name: Download checksum-pinned K3s installer
+  ansible.builtin.get_url:
+    url: https://get.k3s.io/
+    dest: /usr/local/lib/k3s-install.sh
+    owner: root
+    group: root
+    mode: '0700'
+    checksum: "sha256:{{ k3s_install_script_sha256 }}"
 
-    - name: Download K3s binary
-      ansible.builtin.command:
-        cmd: /usr/local/bin/k3s-install.sh
-      environment:
-        INSTALL_K3S_SKIP_START: "true"
-        INSTALL_K3S_VERSION: "{{ k3s_version }}"
-      changed_when: true
+- name: Verify checksum-pinned installer on server
+  ansible.builtin.stat:
+    path: /usr/local/lib/k3s-install.sh
+    checksum_algorithm: sha256
+  register: k3s_server_installer
 
-- name: Setup optional config file
-  when: server_config_yaml is defined
-  block:
-    - name: Make config directory
-      ansible.builtin.file:
-        path: "/etc/rancher/k3s"
-        mode: "0755"
-        state: directory
-    - name: Copy config values
-      ansible.builtin.copy:
-        content: "{{ server_config_yaml }}"
-        dest: "/etc/rancher/k3s/config.yaml"
-        mode: "0644"
+- name: Require exact installer checksum on server
+  ansible.builtin.assert:
+    that:
+      - k3s_server_installer.stat.checksum == k3s_install_script_sha256
+    fail_msg: Installed K3s installer checksum does not match the inventory pin.
 
-- name: Init first server node
-  when: inventory_hostname == groups['server'][0]
-  block:
-    - name: Copy K3s service file [Single]
-      when: groups['server'] | length == 1
-      ansible.builtin.template:
-        src: "k3s-single.service.j2"
-        dest: "{{ systemd_dir }}/k3s.service"
-        owner: root
-        group: root
-        mode: "0644"
-      vars:
-        token_args: ""
+- name: Install initial embedded-etcd server
+  ansible.builtin.command:
+    argv: >-
+      {{
+        [
+          '/usr/local/lib/k3s-install.sh',
+          'server',
+          '--cluster-init'
+        ] + k3s_server_common_args
+      }}
+  environment:
+    INSTALL_K3S_VERSION: "{{ k3s_install_version }}"
+  when: groups['server'].index(inventory_hostname) == 0
+  no_log: true
 
-    - name: Copy K3s service file [HA]
-      when: groups['server'] | length > 1
-      ansible.builtin.template:
-        src: "k3s-cluster-init.service.j2"
-        dest: "{{ systemd_dir }}/k3s.service"
-        owner: root
-        group: root
-        mode: "0644"
-      vars:
-        token_args: ""
+- name: Wait for initial server API readiness
+  ansible.builtin.command:
+    argv:
+      - k3s
+      - kubectl
+      - get
+      - --raw=/readyz
+  register: k3s_server_initial_readyz
+  changed_when: false
+  retries: 60
+  delay: 2
+  until: k3s_server_initial_readyz.rc == 0
+  when: groups['server'].index(inventory_hostname) == 0
 
-    - name: Add service environment variables
-      when: extra_service_envs is defined
-      ansible.builtin.lineinfile:
-        path: "{{ systemd_dir }}/k3s.service.env"
-        line: "{{ item }}"
-      with_items: "{{ extra_service_envs }}"
+- name: Fetch initial server kubeconfig to controller staging
+  ansible.builtin.fetch:
+    src: /etc/rancher/k3s/k3s.yaml
+    dest: "{{ k3s_server_controller_kubeconfig_file }}"
+    flat: true
+  when: groups['server'].index(inventory_hostname) == 0
+  no_log: true
 
-    - name: Enable and check K3s service
-      ansible.builtin.systemd:
-        name: k3s
-        daemon_reload: true
-        state: started
-        enabled: true
+- name: Point health kubeconfig at inventory API endpoint
+  ansible.builtin.command:
+    argv:
+      - "{{ controller_kubectl }}"
+      - --kubeconfig
+      - "{{ k3s_server_controller_kubeconfig_file }}"
+      - config
+      - set-cluster
+      - default
+      - "--server=https://{{ k3s_server_api_endpoint }}:{{ api_port }}"
+  delegate_to: localhost
+  become: false
+  changed_when: true
+  when: groups['server'].index(inventory_hostname) == 0
+  no_log: true
 
-    - name: Get Master Node Token
-      shell: sudo cat /var/lib/rancher/k3s/server/node-token
-      register: master_token
-      run_once: true
+- name: Fetch initial server token to controller staging
+  ansible.builtin.fetch:
+    src: "{{ k3s_server_node_token_file }}"
+    dest: "{{ k3s_server_controller_token_file }}"
+    flat: true
+  when: groups['server'].index(inventory_hostname) == 0
+  no_log: true
 
-    - set_fact:
-        token_args: "--token {{ master_token.stdout }}"
-        cacheable: true
+- name: Restrict controller token staging
+  ansible.builtin.file:
+    path: "{{ k3s_server_controller_token_file }}"
+    owner: "{{ lookup('env', 'USER') }}"
+    mode: '0600'
+  delegate_to: localhost
+  become: false
+  when: groups['server'].index(inventory_hostname) == 0
+  no_log: true
 
-    - name: Export controller kubeconfig
-      ansible.builtin.include_tasks: export_kubeconfig.yml
-    - name: Pause to allow first server startup
-      when: (groups['server'] | length) > 1
-      ansible.builtin.pause:
-        seconds: 10
+- name: Create root-only K3s configuration directory for joining server
+  ansible.builtin.file:
+    path: "{{ k3s_server_token_file | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+  when: groups['server'].index(inventory_hostname) > 0
 
-- name: Start other server if any and verify status
-  when:
-    - (groups['server'] | length) > 1
-    - inventory_hostname != groups['server'][0]
-  block:
-    - name: Copy K3s service file [HA]
-      when: groups['server'] | length > 1
-      ansible.builtin.template:
-        src: "k3s-ha.service.j2"
-        dest: "{{ systemd_dir }}/k3s.service"
-        owner: root
-        group: root
-        mode: "0644"
-      vars:
-        token_args: "--token {{ hostvars[groups['server'][0]]['master_token']['stdout'] }}"
+- name: Stage root-only token file for joining server
+  ansible.builtin.copy:
+    src: "{{ k3s_server_controller_token_file }}"
+    dest: "{{ k3s_server_token_file }}"
+    owner: root
+    group: root
+    mode: '0600'
+  when: groups['server'].index(inventory_hostname) > 0
+  no_log: true
 
-    - name: Enable and check K3s service
-      ansible.builtin.systemd:
-        name: k3s
-        daemon_reload: true
-        state: started
-        enabled: true
+- name: Require root-only joining token file
+  ansible.builtin.stat:
+    path: "{{ k3s_server_token_file }}"
+  register: k3s_server_join_file_stat
+  when: groups['server'].index(inventory_hostname) > 0
+  no_log: true
 
-    - name: Verify that all server nodes joined
-      when: (groups['server'] | length) > 1
-      ansible.builtin.command:
-        cmd: >
-          k3s kubectl get nodes -l "node-role.kubernetes.io/control-plane=true" -o=jsonpath="{.items[*].metadata.name}"
-      register: nodes
-      until: nodes.rc == 0 and (nodes.stdout.split() | length) == (groups['server'] | length)
-      retries: 20
-      delay: 10
-      changed_when: false
+- name: Assert root-only joining token file
+  ansible.builtin.assert:
+    that:
+      - k3s_server_join_file_stat.stat.exists
+      - k3s_server_join_file_stat.stat.pw_name == 'root'
+      - k3s_server_join_file_stat.stat.mode == '0600'
+  when: groups['server'].index(inventory_hostname) > 0
+
+- name: Install joining embedded-etcd server with token file
+  ansible.builtin.command:
+    argv: >-
+      {{
+        [
+          '/usr/local/lib/k3s-install.sh',
+          'server',
+          '--server',
+          'https://' ~ (
+            hostvars[groups['server'][0]].ansible_host
+            | default(groups['server'][0])
+          ) ~ ':' ~ (api_port | string),
+          '--token-file',
+          k3s_server_token_file
+        ] + k3s_server_common_args
+      }}
+  environment:
+    INSTALL_K3S_VERSION: "{{ k3s_install_version }}"
+  when: groups['server'].index(inventory_hostname) > 0
+  no_log: true
+
+- name: Wait for controller API readiness after this server install
+  ansible.builtin.command:
+    argv:
+      - "{{ controller_kubectl }}"
+      - --kubeconfig
+      - "{{ k3s_server_controller_kubeconfig_file }}"
+      - get
+      - --raw=/readyz
+  delegate_to: localhost
+  become: false
+  register: k3s_server_controller_readyz
+  changed_when: false
+  retries: 60
+  delay: 2
+  until: k3s_server_controller_readyz.rc == 0
+
+- name: Prove exact installed node registration before CNI
+  ansible.builtin.command:
+    argv:
+      - "{{ controller_kubectl }}"
+      - --kubeconfig
+      - "{{ k3s_server_controller_kubeconfig_file }}"
+      - get
+      - node
+      - "{{ k3s_server_expected_node_name }}"
+      - --output=json
+  delegate_to: localhost
+  become: false
+  register: k3s_server_node
+  changed_when: false
+  retries: 30
+  delay: 2
+  until: >-
+    k3s_server_node.rc == 0
+    and (k3s_server_node.stdout | from_json).metadata.name == k3s_server_expected_node_name
+    and (k3s_server_node.stdout | from_json).status.nodeInfo.kubeletVersion == k3s_install_version
+    and (
+      (k3s_server_node.stdout | from_json).status.conditions
+      | selectattr('type', 'equalto', 'Ready')
+      | selectattr('status', 'equalto', 'False')
+      | selectattr('message', 'defined')
+      | selectattr('message', 'search', 'NetworkPluginNotReady')
+      | list | length
+    ) == 1
+
+- name: Assert exact installed node registration before CNI
+  ansible.builtin.assert:
+    that:
+      - (k3s_server_node.stdout | from_json).metadata.name == k3s_server_expected_node_name
+      - (k3s_server_node.stdout | from_json).status.nodeInfo.kubeletVersion == k3s_install_version
+      - >-
+        (k3s_server_node.stdout | from_json).status.conditions
+        | selectattr('type', 'equalto', 'Ready')
+        | selectattr('status', 'equalto', 'False')
+        | selectattr('message', 'defined')
+        | selectattr('message', 'search', 'NetworkPluginNotReady')
+        | list | length == 1
+    fail_msg: Installed server did not register with the exact pre-CNI node contract.
+
+- name: Read exact Kubernetes node set after this server install
+  ansible.builtin.command:
+    argv:
+      - "{{ controller_kubectl }}"
+      - --kubeconfig
+      - "{{ k3s_server_controller_kubeconfig_file }}"
+      - get
+      - nodes
+      - --output=json
+  delegate_to: localhost
+  become: false
+  register: k3s_server_nodes
+  changed_when: false
+
+- name: Count the observed ordered Kubernetes members
+  ansible.builtin.set_fact:
+    k3s_server_observed_member_count: >-
+      {{ (k3s_server_nodes.stdout | from_json)['items'] | length }}
+
+- name: Require exact ordered Kubernetes node set
+  ansible.builtin.assert:
+    that:
+      - k3s_server_observed_member_count | int >= k3s_server_expected_member_count | int
+      - k3s_server_observed_member_count | int <= groups['server'] | length
+      - >-
+        (k3s_server_nodes.stdout | from_json)['items']
+        | map(attribute='metadata.name') | sort
+        == k3s_server_expected_member_names[:k3s_server_observed_member_count | int] | sort
+    fail_msg: Kubernetes nodes do not match the ordered server installation.
+
+- name: Read local embedded-etcd health metrics from every installed server
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/python3
+      - -c
+      - |
+        import json
+        import urllib.request
+
+        lines = urllib.request.urlopen(
+            "http://127.0.0.1:2381/metrics", timeout=10
+        ).read().decode().splitlines()
+
+        def metric_value(name):
+            matches = [line for line in lines if line.startswith(name + " ")]
+            if len(matches) != 1:
+                raise RuntimeError(f"expected one {name} metric, got {len(matches)}")
+            return int(float(matches[0].rsplit(" ", 1)[1]))
+
+        def metric_label(name, label):
+            matches = [line for line in lines if line.startswith(name + "{")]
+            if len(matches) != 1:
+                raise RuntimeError(f"expected one {name} metric, got {len(matches)}")
+            prefix = f'{label}="'
+            return matches[0].split(prefix, 1)[1].split('"', 1)[0]
+
+        peer_lines = [
+            line for line in lines
+            if line.startswith("etcd_network_active_peers{")
+            and line.endswith(" 1")
+        ]
+        active_peers = sorted(
+            line.split('Remote="', 1)[1].split('"', 1)[0]
+            for line in peer_lines
+        )
+        print(json.dumps({
+            "active_peers": active_peers,
+            "has_leader": metric_value("etcd_server_has_leader"),
+            "is_leader": metric_value("etcd_server_is_leader"),
+            "is_learner": metric_value("etcd_server_is_learner"),
+            "server_id": metric_label("etcd_server_id", "server_id"),
+            "server_version": metric_label("etcd_server_version", "server_version"),
+        }, sort_keys=True))
+  loop: "{{ groups['server'][: k3s_server_observed_member_count | int] }}"
+  loop_control:
+    label: "{{ item }}"
+  register: k3s_server_etcd_metrics
+  changed_when: false
+  delegate_to: "{{ item }}"
+  become: true
+  retries: 30
+  delay: 2
+  until: k3s_server_etcd_metrics is succeeded
+
+- name: Parse embedded-etcd health observations
+  ansible.builtin.set_fact:
+    k3s_server_etcd_observations: >-
+      {{ k3s_server_etcd_metrics.results
+         | map(attribute='stdout')
+         | map('from_json')
+         | list }}
+
+- name: Require exact healthy voting member count
+  ansible.builtin.assert:
+    that:
+      - k3s_server_etcd_observations | length == k3s_server_observed_member_count | int
+      - k3s_server_etcd_observations | map(attribute='server_id') | unique | list | length == k3s_server_observed_member_count | int
+      - k3s_server_etcd_observations | selectattr('has_leader', 'equalto', 1) | list | length == k3s_server_observed_member_count | int
+      - k3s_server_etcd_observations | selectattr('is_learner', 'equalto', 0) | list | length == k3s_server_observed_member_count | int
+      - k3s_server_etcd_observations | map(attribute='is_leader') | sum == 1
+      - k3s_server_etcd_observations | map(attribute='server_version') | unique | list == [k3s_server_expected_etcd_version]
+    fail_msg: Embedded-etcd is not exactly the expected healthy voting membership.
+
+- name: Require every installed embedded-etcd member to see all expected peers
+  ansible.builtin.assert:
+    that:
+      - >-
+        item.active_peers | sort
+        == k3s_server_etcd_observations
+           | map(attribute='server_id')
+           | difference([item.server_id])
+           | sort
+    fail_msg: Embedded-etcd peer topology does not match the installed voting members.
+  loop: "{{ k3s_server_etcd_observations }}"
+  loop_control:
+    label: "{{ item.server_id }}"
+
+- name: Read installed K3s binary checksum
+  ansible.builtin.stat:
+    path: /usr/local/bin/k3s
+    checksum_algorithm: sha256
+  register: k3s_server_binary
+
+- name: Require exact installed K3s binary checksum
+  ansible.builtin.assert:
+    that:
+      - k3s_server_binary.stat.exists
+      - k3s_server_binary.stat.checksum == k3s_releases[k3s_install_version].arm64_sha256
+    fail_msg: Installed K3s binary checksum does not match the pinned release.
+
+- name: Read server unit arguments without printing them
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - show
+      - k3s.service
+      - --property=ExecStart
+      - --value
+  register: k3s_server_unit
+  changed_when: false
+  no_log: true
+
+- name: Require recognizable installed server ExecStart
+  ansible.builtin.assert:
+    that:
+      - "'argv[]=' in k3s_server_unit.stdout"
+    fail_msg: Installed K3s server unit does not expose a verifiable ExecStart argv.
+  no_log: true
+
+- name: Parse installed server ExecStart argv
+  ansible.builtin.set_fact:
+    k3s_server_installed_argv: >-
+      {{
+        k3s_server_unit.stdout
+        .split('argv[]=', 1)[1]
+        .split(';', 1)[0]
+        .split()
+      }}
+  no_log: true
+
+- name: Enforce the installed server network contract
+  ansible.builtin.assert:
+    that:
+      - >-
+        (k3s_server_installed_argv
+        | select('match', '^--cluster-cidr(?:=|$)') | list)
+        == ['--cluster-cidr']
+      - >-
+        ('--cluster-cidr ' ~ cluster_cidr)
+        in (k3s_server_installed_argv | join(' '))
+      - >-
+        (k3s_server_installed_argv
+        | select('match', '^--service-cidr(?:=|$)') | list)
+        == ['--service-cidr']
+      - >-
+        ('--service-cidr ' ~ service_cidr)
+        in (k3s_server_installed_argv | join(' '))
+      - >-
+        (k3s_server_installed_argv
+        | select('match', '^--cluster-dns(?:=|$)') | list)
+        == ['--cluster-dns']
+      - >-
+        ('--cluster-dns ' ~ cluster_dns)
+        in (k3s_server_installed_argv | join(' '))
+      - >-
+        (k3s_server_installed_argv
+        | select('match', '^--disable(?:=|$)') | list)
+        == ['--disable', '--disable']
+      - >-
+        '--disable traefik'
+        in (k3s_server_installed_argv | join(' '))
+      - >-
+        '--disable servicelb'
+        in (k3s_server_installed_argv | join(' '))
+      - >-
+        (k3s_server_installed_argv
+        | select('match', '^--disable-network-policy(?:=|$)') | list)
+        == ['--disable-network-policy']
+      - >-
+        (k3s_server_installed_argv
+        | select('match', '^--disable-kube-proxy(?:=|$)') | list)
+        == ['--disable-kube-proxy']
+      - >-
+        (k3s_server_installed_argv
+        | select('match', '^--flannel-') | list)
+        == ['--flannel-backend=none']
+      - >-
+        k3s_server_installed_argv
+        | select('match', '^--token(?:=|$)')
+        | list | length == 0
+    fail_msg: Installed K3s server ExecStart violates the role-owned network or token contract.
+  no_log: true
+
+- name: Enforce the installed initial-server arguments
+  ansible.builtin.assert:
+    that:
+      - >-
+        k3s_server_installed_argv
+        | select('equalto', '--cluster-init')
+        | list | length == 1
+      - >-
+        k3s_server_installed_argv
+        | select('match', '^--server(?:=|$)')
+        | list | length == 0
+      - >-
+        k3s_server_installed_argv
+        | select('match', '^--token-file(?:=|$)')
+        | list | length == 0
+    fail_msg: Installed initial K3s server unit contains conflicting join arguments.
+  when: groups['server'].index(inventory_hostname) == 0
+  no_log: true
+
+- name: Enforce the installed joining-server arguments
+  ansible.builtin.assert:
+    that:
+      - >-
+        k3s_server_installed_argv
+        | select('equalto', '--cluster-init')
+        | list | length == 0
+      - >-
+        (k3s_server_installed_argv
+        | select('match', '^--server(?:=|$)') | list)
+        == ['--server']
+      - >-
+        ('--server https://' ~ (
+          hostvars[groups['server'][0]].ansible_host
+          | default(groups['server'][0])
+        ) ~ ':' ~ (api_port | string))
+        in (k3s_server_installed_argv | join(' '))
+      - >-
+        (k3s_server_installed_argv
+        | select('match', '^--token-file(?:=|$)') | list)
+        == ['--token-file']
+      - >-
+        ('--token-file ' ~ k3s_server_token_file)
+        in (k3s_server_installed_argv | join(' '))
+    fail_msg: Installed joining K3s server unit violates the role-owned join contract.
+  when: groups['server'].index(inventory_hostname) > 0
+  no_log: true
+
+- name: Remove token-bearing legacy environment files
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/systemd/system/k3s.service.env
+    - /etc/systemd/system/k3s-agent.service.env

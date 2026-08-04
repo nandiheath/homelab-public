@@ -1,36 +1,121 @@
 ---
-- name: Undo cluster setup
+- name: Capture non-secret preservation facts from every cluster member
   hosts: k3s_cluster
+  gather_facts: true
   become: true
+  serial: 1
+  any_errors_fatal: true
   tasks:
-    - name: Run K3s Uninstall script [server]
-      when: "'server' in group_names"
-      ansible.builtin.command:
-        cmd: k3s-uninstall.sh
-        removes: /var/lib/rancher/k3s/*
-    - name: Run K3s Uninstall script [agent]
-      when: "'agent' in group_names"
-      ansible.builtin.command:
-        cmd: k3s-agent-uninstall.sh
-        removes: /var/lib/rancher/k3s/*
-    - name: Remove controller kubeconfig # noqa: run-once[task]
-      ansible.builtin.file:
-        path: "{{ kubeconfig }}"
-        state: absent
-      delegate_to: localhost
-      become: false
-      run_once: true
-    - name: Remove k3s install script
-      ansible.builtin.file:
-        path: /usr/local/bin/k3s-install.sh
-        state: absent
-    - name: Remove contents of K3s server location
-      when: k3s_server_location is defined
-      ansible.builtin.shell:
-        cmd: "rm -rf {{ k3s_server_location }}/*"
-        removes: "{{ k3s_server_location }}/*"
-    - name: Remove K3s config
-      when: server_config_yaml is defined
-      ansible.builtin.file:
-        path: /etc/rancher/k3s/config.yaml
-        state: absent
+    - name: Capture host preservation baseline
+      ansible.builtin.include_role:
+        name: k3s_reset
+        tasks_from: capture_host_facts
+
+- name: Validate interrupted-reset recovery eligibility
+  hosts: server
+  gather_facts: false
+  become: false
+  any_errors_fatal: true
+  tasks:
+    - name: Require an explicit boolean recovery selector
+      ansible.builtin.assert:
+        that:
+          - reset_recovery is not defined or reset_recovery is boolean
+        fail_msg: >-
+          Refusing reset: reset_recovery must be an explicit boolean when supplied.
+
+    - name: Inspect K3s installation paths before recovery
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /usr/local/bin/k3s
+        - /usr/local/bin/k3s-uninstall.sh
+        - /usr/local/bin/k3s-agent-uninstall.sh
+        - /var/lib/rancher/k3s
+      register: reset_recovery_installation_paths
+      when: reset_recovery | default(false)
+
+    - name: Require the generated K3s uninstall to have completed before recovery
+      ansible.builtin.assert:
+        that:
+          - reset_recovery_installation_paths.results | selectattr('stat.exists') | list | length == 0
+        fail_msg: >-
+          Refusing reset recovery: a K3s binary, generated uninstall entrypoint,
+          or primary state directory still exists. Run the normal guarded reset.
+      when: reset_recovery | default(false)
+- name: Recheck the live cluster immediately before reset authorization
+  hosts: localhost
+  gather_facts: false
+  become: false
+  vars:
+    reset_kubeconfig: "{{ kubeconfig | default('', true) }}"
+    reset_kubectl: "{{ controller_kubectl | default(playbook_dir ~ '/../../bin/kubectl', true) }}"
+  tasks:
+    - name: Recheck reset preflight
+      ansible.builtin.include_role:
+        name: k3s_reset
+        tasks_from: preflight
+      when: not (reset_recovery | default(false))
+
+- name: Authorize the destructive K3s reset
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  become: false
+  vars:
+    reset_controller_kubeconfig: "{{ kubeconfig | default('', true) }}"
+    reset_controller_kubectl: "{{ controller_kubectl | default(playbook_dir ~ '/../../bin/kubectl', true) }}"
+  roles:
+    - role: operation_guard
+      vars:
+        operation_guard_operation: reset
+        operation_guard_source_version: "{{ k3s_install_version | default('', true) }}"
+        operation_guard_target_version: "{{ k3s_target_version | default('', true) }}"
+        operation_guard_kubeconfig: "{{ reset_controller_kubeconfig }}"
+        operation_guard_required_controller_tools: []
+
+- name: Remove K3s agents before every server
+  hosts: agent
+  gather_facts: false
+  become: true
+  serial: 1
+  any_errors_fatal: true
+  vars:
+    reset_wipe_role: agent
+  roles:
+    - role: k3s_reset
+
+- name: Remove secondary K3s servers one at a time
+  hosts: "server[1:]"
+  gather_facts: false
+  become: true
+  serial: 1
+  any_errors_fatal: true
+  vars:
+    reset_wipe_role: server
+  roles:
+    - role: k3s_reset
+
+- name: Remove the initial K3s server last
+  hosts: "server[0]"
+  gather_facts: false
+  become: true
+  serial: 1
+  any_errors_fatal: true
+  vars:
+    reset_wipe_role: server
+  roles:
+    - role: k3s_reset
+
+- name: Verify final absence and remove the controller kubeconfig
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  become: false
+  vars:
+    reset_kubeconfig: "{{ kubeconfig | default('', true) }}"
+  tasks:
+    - name: Verify final reset absence
+      ansible.builtin.include_role:
+        name: k3s_reset
+        tasks_from: final

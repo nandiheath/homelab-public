@@ -17,7 +17,12 @@ done
 
 actionlint
 shellcheck -x scripts/*.sh
-./scripts/render.sh --all --infra
+ARGOCD_GITHUB_REPO=https://github.com/nandiheath/homelab-public.git \
+ARGOCD_GITHUB_ORG=https://github.com/nandiheath \
+VAULT=homelab \
+ARGOCD_ADMIN_GITHUB_USER=nandiheath \
+HOMELAB_RENDER_CANONICAL=true \
+  ./scripts/render.sh --all --infra
 kubeconform \
   -strict \
   -summary \

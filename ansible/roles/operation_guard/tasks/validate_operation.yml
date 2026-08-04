@@ -1,0 +1,48 @@
+---
+- name: Build expected literal confirmation
+  ansible.builtin.set_fact:
+    operation_guard_expected_confirmation: >-
+      {{
+        'UPGRADE ' ~ operation_guard_cluster_id ~ ' FROM ' ~ operation_guard_source_version ~ ' TO ' ~ operation_guard_target_version
+        if operation_guard_operation == 'k3s_upgrade'
+        else operation_guard_confirmations[operation_guard_operation]
+      }}
+  delegate_facts: true
+
+- name: Validate operation-specific inventory values
+  ansible.builtin.assert:
+    that:
+      - operation_guard_operation != 'kernel_activation' or (kernel_running_release is defined and kernel_running_release is string and kernel_running_release == operation_guard_kernel_release)
+      - operation_guard_operation != 'k3s_upgrade' or operation_guard_source_version in operation_guard_upgrade_paths
+      - operation_guard_operation != 'k3s_upgrade' or operation_guard_target_version == operation_guard_upgrade_paths[operation_guard_source_version]
+      - operation_guard_operation != 'k3s_install' or operation_guard_target_version in ['', operation_guard_expected_k3s_install_version]
+    fail_msg: >-
+      Refusing lifecycle operation: the requested kernel or K3s version boundary
+      is not an approved boundary for this cluster.
+
+- name: Require the direct operation literal
+  ansible.builtin.assert:
+    that:
+      - operation_guard_confirmation is defined
+      - operation_guard_confirmation is string
+      - operation_guard_confirmation == hostvars['localhost'].operation_guard_expected_confirmation
+    fail_msg: "Refusing lifecycle operation: the direct confirmation is missing, mistyped, stale, or not exact."
+  when: operation_guard_invocation == 'direct'
+
+- name: Require a validated parent operation context
+  ansible.builtin.assert:
+    that:
+      - operation_guard_parent_context is mapping
+      - operation_guard_parent_context.guard | default('') == 'operation_guard'
+      - operation_guard_parent_context.validation_version | default(0) == 1
+      - operation_guard_parent_context.validated | default(false) is boolean
+      - operation_guard_parent_context.validated | default(false)
+      - operation_guard_parent_context.operation | default('') == operation_guard_operation
+      - operation_guard_parent_context.cluster_id | default('') == operation_guard_cluster_id
+      - operation_guard_parent_context.source_version | default('') == operation_guard_source_version
+      - operation_guard_parent_context.target_version | default('') == operation_guard_target_version
+      - operation_guard_parent_context.confirmation | default('') == hostvars['localhost'].operation_guard_expected_confirmation
+    fail_msg: >-
+      Refusing lifecycle operation: an imported mutating playbook requires the
+      matching context produced by a validated parent operation guard.
+  when: operation_guard_invocation == 'imported'

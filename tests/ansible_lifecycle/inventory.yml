@@ -1,0 +1,39 @@
+---
+all:
+  hosts:
+    localhost:
+      ansible_connection: local
+  vars:
+    cluster_id: fixture-cluster
+    ansible_ssh_common_args: >-
+      -o StrictHostKeyChecking=yes
+      -o UserKnownHostsFile={{ fixture_known_hosts_file }}
+    operation_guard_known_hosts_file: "{{ fixture_known_hosts_file }}"
+    k3s_install_version: v1.36.2+k3s1
+    k3s_target_version: v1.36.2+k3s1
+    k3s_install_script_sha256: d264d4d43f7c5a27b44de0075513fb22dfb02d0b7cd33ba7a3838cb822f4729c
+    cluster_cidr: 10.244.0.0/16
+    service_cidr: 10.96.0.0/16
+    cluster_dns: 10.96.0.10
+    kernel_running_release: 5.15.0-1105-raspi
+    k3s_releases:
+      v1.36.2+k3s1:
+        etcd_version: v3.6.12-k3s1
+        arm64_sha256: 1dc5fc17f15c28fa0a3f011cee28ad613f918c3d967a426e5a05d43ddb239817
+  children:
+    k3s_cluster:
+      children:
+        server:
+          hosts:
+            node-0:
+              ansible_host: 192.0.2.11
+              k3s_node_name: node-0
+              operation_guard_pinned_ssh_host_key: "{{ fixture_host_key }}"
+            node-1:
+              ansible_host: 192.0.2.12
+              k3s_node_name: node-1
+              operation_guard_pinned_ssh_host_key: "{{ fixture_host_key }}"
+            node-2:
+              ansible_host: 192.0.2.13
+              k3s_node_name: node-2
+              operation_guard_pinned_ssh_host_key: "{{ fixture_host_key }}"

@@ -1,0 +1,109 @@
+---
+- name: Recompute preserved host facts after every wipe
+  ansible.builtin.setup:
+    gather_subset:
+      - min
+      - distribution
+      - kernel
+      - network
+
+- name: Recompute the local user inventory after every wipe
+  ansible.builtin.getent:
+    database: passwd
+
+- name: Recompute SSH configuration and host-key hashes after every wipe
+  ansible.builtin.command:
+    argv: [/usr/bin/find, /etc/ssh, -type, f, -exec, /usr/bin/sha256sum, '{}', '+']
+  register: reset_ssh_files_after
+  changed_when: false
+
+- name: Recompute SSH host-key hashes after every wipe
+  ansible.builtin.command:
+    argv: [/usr/bin/find, /etc/ssh, -type, f, -name, 'ssh_host_*', -exec, /usr/bin/sha256sum, '{}', '+']
+  register: reset_ssh_keys_after
+  changed_when: false
+
+- name: Recompute persistent network configuration hashes after every wipe
+  ansible.builtin.command:
+    argv: [/usr/bin/find, /etc/netplan, /etc/network, -type, f, -exec, /usr/bin/sha256sum, '{}', '+']
+  register: reset_network_config_files_after
+  changed_when: false
+  failed_when: false
+
+- name: Recompute boot firmware hashes after every wipe
+  ansible.builtin.command:
+    argv: [/usr/bin/find, /boot/firmware, -type, f, -exec, /usr/bin/sha256sum, '{}', '+']
+  register: reset_boot_firmware_files_after
+  changed_when: false
+
+
+- name: Record recomputed preserved host facts
+  ansible.builtin.set_fact:
+    reset_post_wipe_observed:
+      distribution: "{{ ansible_facts.distribution }}"
+      distribution_version: "{{ ansible_facts.distribution_version }}"
+      os_family: "{{ ansible_facts.os_family }}"
+      hostname: "{{ ansible_facts.hostname }}"
+      kernel: "{{ ansible_facts.kernel }}"
+      users: "{{ ansible_facts.getent_passwd.keys() | list | sort }}"
+      ssh_files: "{{ reset_ssh_files_after.stdout_lines | sort }}"
+      ssh_keys: "{{ reset_ssh_keys_after.stdout_lines | sort }}"
+      network_config_files: "{{ reset_network_config_files_after.stdout_lines | sort }}"
+      network_identity: "{{ ansible_facts.default_ipv4 }}"
+      boot_firmware_files: "{{ reset_boot_firmware_files_after.stdout_lines | sort }}"
+
+- name: Require every preserved host fact to match its pre-reset baseline
+  ansible.builtin.assert:
+    that:
+      - reset_post_wipe_observed.users == reset_preservation_baseline.users
+      - reset_post_wipe_observed.ssh_files == reset_preservation_baseline.ssh_files
+      - reset_post_wipe_observed.ssh_keys == reset_preservation_baseline.ssh_keys
+      - reset_post_wipe_observed.network_config_files == reset_preservation_baseline.network_config_files
+      - reset_post_wipe_observed.network_identity == reset_preservation_baseline.network_identity
+      - reset_post_wipe_observed.boot_firmware_files == reset_preservation_baseline.boot_firmware_files
+      - reset_post_wipe_observed.hostname == reset_preservation_baseline.hostname
+      - reset_post_wipe_observed.distribution == reset_preservation_baseline.distribution
+      - reset_post_wipe_observed.distribution_version == reset_preservation_baseline.distribution_version
+      - reset_post_wipe_observed.os_family == reset_preservation_baseline.os_family
+      - reset_post_wipe_observed.kernel == reset_preservation_baseline.kernel
+    fail_msg: >-
+      Reset changed preserved host state; refusing to continue to any remaining
+      cluster member.
+
+- name: Check cluster-owned paths are absent
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop: "{{ reset_absent_paths }}"
+  register: reset_absent_path_stats
+
+- name: Require cluster-owned paths absent
+  ansible.builtin.assert:
+    that: not item.stat.exists
+    fail_msg: "Cluster-owned path remains after reset: {{ item.item }}"
+  loop: "{{ reset_absent_path_stats.results }}"
+
+- name: Check K3s and cluster-owned services are absent
+  ansible.builtin.command:
+    argv: [systemctl, "is-active", "{{ item }}"]
+  loop: [k3s, k3s-agent, cilium, longhorn-manager]
+  register: reset_service_state
+  changed_when: false
+  failed_when: false
+
+- name: Require K3s and cluster-owned services inactive
+  ansible.builtin.assert:
+    that: item.rc != 0
+    fail_msg: "Cluster-owned service is still active: {{ item.item }}"
+  loop: "{{ reset_service_state.results }}"
+
+- name: Check K3s, Cilium, and Longhorn process absence
+  ansible.builtin.command:
+    argv: [pgrep, -f, "(^|/)(k3s|k3s-agent|cilium|longhorn)( |$)"]
+  register: reset_cluster_processes
+  changed_when: false
+  failed_when: false
+
+- name: Require K3s, Cilium, and Longhorn processes absent
+  ansible.builtin.assert:
+    that: reset_cluster_processes.rc != 0
+    fail_msg: Cluster-owned process remains after reset.

@@ -1,68 +1,71 @@
 ---
-# with_fileglob doesn't work with remote_src, it tries to find the file on the
-# local control-plane instead of the remote host. Shell supports wildcards.
-- name: Get k3s installed version
-  ansible.builtin.command: k3s --version
-  register: k3s_version_output
+- name: Validate approved K3s upgrade boundary
+  ansible.builtin.assert:
+    that:
+      - k3s_upgrade_source_version is string
+      - k3s_upgrade_source_version | length > 0
+      - k3s_upgrade_source_version in k3s_releases
+      - k3s_upgrade_target_version is string
+      - k3s_upgrade_target_version in k3s_releases
+      - k3s_upgrade_source_version != k3s_upgrade_target_version
+      - k3s_install_script_sha256 is match('^[0-9a-f]{64}$')
+    fail_msg: Guarded upgrade source or target is not pinned.
+
+- name: Read current K3s version
+  ansible.builtin.command:
+    argv: [/usr/local/bin/k3s, --version]
+  register: k3s_upgrade_current
   changed_when: false
 
-- name: Set k3s installed version
-  ansible.builtin.set_fact:
-    installed_k3s_version: "{{ k3s_version_output.stdout_lines[0].split(' ')[2] }}"
+- name: Require uniform expected source version on target node
+  ansible.builtin.assert:
+    that:
+      - k3s_upgrade_source_version in k3s_upgrade_current.stdout
+    fail_msg: Target node does not run the authorized upgrade source version.
 
-# We should be downloading and installing the newer version only if we are in the following case :
-#   - the installed version of K3s on the nodes is older than the requested version in ansible vars
-- name: Update node only if needed
-  when: installed_k3s_version is version(k3s_version, '<')
-  block:
-    - name: Find K3s service files
-      ansible.builtin.find:
-        paths: "{{ systemd_dir }}"
-        patterns: "k3s*.service"
-      register: k3s_service_files
+- name: Download checksum-pinned K3s installer
+  ansible.builtin.get_url:
+    url: https://get.k3s.io/
+    dest: /usr/local/lib/k3s-install.sh
+    owner: root
+    group: root
+    mode: '0700'
+    checksum: "sha256:{{ k3s_install_script_sha256 }}"
 
-    - name: Save current K3s service
-      ansible.builtin.copy:
-        src: "{{ item.path }}"
-        dest: "{{ item.path }}.bak"
-        remote_src: true
-        mode: preserve
-        force: true
-      loop: "{{ k3s_service_files.files }}"
+- name: Install approved K3s target binary without token arguments
+  ansible.builtin.command:
+    argv: [/usr/local/lib/k3s-install.sh]
+  environment:
+    INSTALL_K3S_VERSION: "{{ k3s_upgrade_target_version }}"
+    INSTALL_K3S_SKIP_START: 'true'
+  no_log: true
 
-    - name: Install new K3s Version
-      ansible.builtin.command:
-        cmd: /usr/local/bin/k3s-install.sh
-      environment:
-        INSTALL_K3S_SKIP_START: "true"
-        INSTALL_K3S_VERSION: "{{ k3s_version }}"
-      changed_when: true
+- name: Verify exact K3s target binary checksum
+  ansible.builtin.stat:
+    path: /usr/local/bin/k3s
+    checksum_algorithm: sha256
+  register: k3s_upgrade_binary
 
-    - name: Restore K3s service
-      ansible.builtin.copy:
-        src: "{{ item.path }}.bak"
-        dest: "{{ item.path }}"
-        remote_src: true
-        mode: preserve
-        force: true
-      loop: "{{ k3s_service_files.files }}"
+- name: Require exact K3s target binary checksum
+  ansible.builtin.assert:
+    that:
+      - k3s_upgrade_binary.stat.checksum == k3s_releases[k3s_upgrade_target_version].arm64_sha256
+    fail_msg: Upgraded K3s binary checksum does not match the pinned target.
 
-    - name: Clean up temporary K3s service backups
-      ansible.builtin.file:
-        path: "{{ item.path }}.bak"
-        state: absent
-      loop: "{{ k3s_service_files.files }}"
+- name: Restart target K3s service
+  ansible.builtin.systemd:
+    name: "{{ 'k3s-agent' if 'agent' in group_names else 'k3s' }}"
+    state: restarted
+    daemon_reload: true
 
-    - name: Restart K3s service [server]
-      when: "'server' in group_names"
-      ansible.builtin.systemd:
-        state: restarted
-        daemon_reload: true
-        name: k3s
+- name: Read restarted K3s version
+  ansible.builtin.command:
+    argv: [/usr/local/bin/k3s, --version]
+  register: k3s_upgrade_restarted
+  changed_when: false
 
-    - name: Restart K3s service [agent]
-      when: "'agent' in group_names"
-      ansible.builtin.systemd:
-        state: restarted
-        daemon_reload: true
-        name: k3s-agent
+- name: Require restarted target to report the exact target version
+  ansible.builtin.assert:
+    that:
+      - k3s_upgrade_target_version in k3s_upgrade_restarted.stdout
+    fail_msg: Restarted target does not report the authorized K3s target version.

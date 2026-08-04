@@ -3,7 +3,7 @@
 ## Session protocol
 
 1. Read this guide and `PROJECT_STATUS.md`; then inspect the parent milestone and child task before changing files.
-2. Planning creates one milestone first; every spawned task must reference that milestone and appear in its checklist. A future reminder remains a planned milestone, not a loose task.
+2. Planning creates one milestone first; every spawned task must reference that milestone and appear in its checklist. A future reminder remains a planned milestone, not a loose task. When work needs production topology or cross-repository setup, read `~/workspace/agent-workspace/knowledge/library/kb-20260803-homelab-cross-repository.md` when available; repository-local contracts remain execution authority and private topology must stay out of this repository.
 3. Claim only one dependency-ready task by moving it from `tasks/planned/` to `tasks/running/`, setting `Status: running`, and recording yourself as its sole owner.
 4. Work in a dedicated worktree. A task's `Owned paths` must be disjoint from every task in `tasks/running/`.
 5. Run the focused proof in the task. Record observed output for every acceptance criterion in its completion handoff.
@@ -37,5 +37,6 @@ For a focused render, use `homelab render --path argocd/infrastructure/<name> --
 - Never use `kubectl`, run Ansible playbooks against non-fixture inventory, execute `scripts/bootstrap.sh`, apply manifests, deploy, publish, or mutate remote infrastructure without explicit user authorization in this conversation.
 - Do not read, add, print, or commit `credentials/`, `config/.env`, Terraform state, or other ignored secrets.
 - Preserve the public/private boundary. Cross-repository validation requires the private repository only when explicitly authorized and available.
+- Keep home-network addresses, hostnames, topology, and firewall policy in the private repository and global knowledge reference. Public documentation, inventory examples, fixtures, and tests must use documentation-safe values and generic identities.
 - Do not change generated artifacts by hand when `homelab render` can produce them.
 - Do not claim overlapping paths or edit another active task's owned paths.

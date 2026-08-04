@@ -3,16 +3,27 @@ k3s_cluster:
   children:
     server:
       hosts:
-        192.0.2.11: {}
-        192.0.2.12: {}
-        192.0.2.13: {}
+        192.0.2.11:
+          k3s_node_name: node-0
+        192.0.2.12:
+          k3s_node_name: node-1
+        192.0.2.13:
+          k3s_node_name: node-2
 
   # Required Vars
   vars:
     ansible_port: 22
     ansible_user: operator
-    k3s_version: v1.33.2+k3s1
+    k3s_install_version: v1.36.2+k3s1
+    k3s_target_version: v1.36.2+k3s1
+    k3s_install_script_sha256: d264d4d43f7c5a27b44de0075513fb22dfb02d0b7cd33ba7a3838cb822f4729c
+    k3s_releases:
+      v1.36.2+k3s1:
+        etcd_version: v3.6.12-k3s1
+        arm64_sha256: 1dc5fc17f15c28fa0a3f011cee28ad613f918c3d967a426e5a05d43ddb239817
     api_endpoint: "{{ hostvars[groups['server'][0]]['ansible_host'] | default(groups['server'][0]) }}"
     # Tune as your needs
-    extra_server_args: "--cluster-cidr 10.244.0.0/16 --service-cidr 10.96.0.0/16 --cluster-dns 10.96.0.10 --disable traefik --disable-network-policy --disable servicelb --disable-kube-proxy --flannel-backend=none"
+    cluster_cidr: 10.244.0.0/16
+    service_cidr: 10.96.0.0/16
+    cluster_dns: 10.96.0.10
     extra_agent_args: ""

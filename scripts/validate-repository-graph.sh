@@ -44,9 +44,11 @@ while IFS=$'\t' read -r name repo revision path; do
   }
 done < <(applications "$private_root")
 
+# Cilium is a deliberately shared platform artifact. Its private derivation is
+# validated separately by the private renderer against the pinned public source.
 identities() {
   local root=$1
-  find "$root/artifacts" -type f \( -name '*.yaml' -o -name '*.yml' \) -print0 | xargs -0 yq -r '[.apiVersion, .kind, (.metadata.namespace // ""), .metadata.name] | @tsv' | sort -u
+  find "$root/artifacts" -type f \( -name '*.yaml' -o -name '*.yml' \) ! -path "$root/artifacts/infrastructure/cilium/*" -print0 | xargs -0 yq -r '[.apiVersion, .kind, (.metadata.namespace // ""), .metadata.name] | @tsv' | sort -u
 }
 if comm -12 <(identities "$public_root") <(identities "$private_root") | grep -q .; then
   printf 'public and private rendered resource identities overlap:\n' >&2

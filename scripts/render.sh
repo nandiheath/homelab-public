@@ -99,18 +99,26 @@ SUBSTITUTION_VARIABLES=(
   VAULT
   ARGOCD_ADMIN_GITHUB_USER
 )
-export ARGOCD_GITHUB_REPO="${ARGOCD_GITHUB_REPO:-https://github.com/nandiheath/homelab-public.git}"
-export ARGOCD_GITHUB_ORG="${ARGOCD_GITHUB_ORG:-https://github.com/nandiheath}"
-export VAULT="${VAULT:-homelab}"
-export ARGOCD_ADMIN_GITHUB_USER="${ARGOCD_ADMIN_GITHUB_USER:-nandiheath}"
 
-if [[ -f "$dir_path/../config/.env" ]]; then
+if [[ "${HOMELAB_RENDER_CANONICAL:-false}" != "true" && -f "$dir_path/../config/.env" ]]; then
   echo "Loading non-secret identifiers from config/.env"
   set -a
   # shellcheck source=/dev/null
   source "$dir_path/../config/.env"
   set +a
 fi
+
+export ARGOCD_GITHUB_REPO="${ARGOCD_GITHUB_REPO:-https://github.com/nandiheath/homelab-public.git}"
+export ARGOCD_GITHUB_ORG="${ARGOCD_GITHUB_ORG:-https://github.com/nandiheath}"
+export VAULT="${VAULT:-homelab}"
+export ARGOCD_ADMIN_GITHUB_USER="${ARGOCD_ADMIN_GITHUB_USER:-nandiheath}"
+ARGOCD_ADMIN_GITHUB_USER="${ARGOCD_ADMIN_GITHUB_USER//\"/}"
+ARGOCD_ADMIN_GITHUB_USER="${ARGOCD_ADMIN_GITHUB_USER//\'/}"
+if [[ ! "$ARGOCD_ADMIN_GITHUB_USER" =~ ^[A-Za-z0-9-]+$ ]]; then
+  echo "Error: ARGOCD_ADMIN_GITHUB_USER must be an unquoted GitHub username." >&2
+  exit 1
+fi
+export ARGOCD_ADMIN_GITHUB_USER
 
 for variable in "${SUBSTITUTION_VARIABLES[@]}"; do
   if [[ -z "${!variable:-}" ]]; then
@@ -141,9 +149,9 @@ interpolate_manifests() {
     content=$(<"$src_file")
     for variable in "${SUBSTITUTION_VARIABLES[@]}"; do
       placeholder="\${${variable}}"
-      content="${content//"$placeholder"/"${!variable}"}"
+      content="${content//"$placeholder"/${!variable}}"
       placeholder="\$${variable}"
-      content="${content//"$placeholder"/"${!variable}"}"
+      content="${content//"$placeholder"/${!variable}}"
     done
     printf '%s\n' "$content" > "$dst_file"
   done < <(find "$src_dir" -type f \( -name "*.yaml" -o -name "*.yml" -o -name "*.json" \) -print0)

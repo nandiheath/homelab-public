@@ -1,0 +1,55 @@
+---
+- name: Inspect generated server uninstall entrypoint
+  ansible.builtin.stat:
+    path: "{{ reset_server_uninstall }}"
+  register: reset_server_uninstall_stat
+
+- name: Inspect generated agent uninstall entrypoint
+  ansible.builtin.stat:
+    path: "{{ reset_agent_uninstall }}"
+  register: reset_agent_uninstall_stat
+
+- name: Inspect K3s state before uninstall
+  ansible.builtin.stat:
+    path: /var/lib/rancher/k3s
+  register: reset_k3s_state_stat
+
+- name: Inspect K3s binary before uninstall
+  ansible.builtin.stat:
+    path: /usr/local/bin/k3s
+  register: reset_k3s_binary_stat
+
+- name: Require the generated role-specific uninstall entrypoint
+  ansible.builtin.assert:
+    that:
+      - >-
+        not (reset_k3s_state_stat.stat.exists or reset_k3s_binary_stat.stat.exists)
+        or (reset_wipe_role == 'server' and reset_server_uninstall_stat.stat.exists)
+        or (reset_wipe_role == 'agent' and reset_agent_uninstall_stat.stat.exists)
+    fail_msg: >-
+      Refusing destructive reset: K3s state exists but the generated uninstall
+      entrypoint for this host role is absent. Do not improvise a replacement.
+
+- name: Run the generated K3s server uninstall entrypoint
+  ansible.builtin.command:
+    argv: ["{{ reset_server_uninstall }}"]
+  when:
+    - reset_wipe_role == 'server'
+    - reset_server_uninstall_stat.stat.exists
+  changed_when: true
+
+- name: Run the generated K3s agent uninstall entrypoint
+  ansible.builtin.command:
+    argv: ["{{ reset_agent_uninstall }}"]
+  when:
+    - reset_wipe_role == 'agent'
+    - reset_agent_uninstall_stat.stat.exists
+  changed_when: true
+
+- name: Remove only known K3s Cilium and Longhorn residue
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop: "{{ reset_cluster_owned_paths }}"
+  loop_control:
+    label: "{{ item }}"

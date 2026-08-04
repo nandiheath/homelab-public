@@ -1,0 +1,16 @@
+---
+- name: Inspect controller sensitive file
+  ansible.builtin.stat:
+    path: "{{ operation_guard_sensitive_file }}"
+  register: operation_guard_sensitive_file_stat
+
+- name: Require restricted controller sensitive file
+  ansible.builtin.assert:
+    that:
+      - operation_guard_sensitive_file_stat.stat.exists
+      - operation_guard_sensitive_file_stat.stat.isreg
+      - operation_guard_sensitive_file_stat.stat.pw_name == operation_guard_controller_owner
+      - operation_guard_sensitive_file_stat.stat.mode == '0600'
+    fail_msg: >-
+      Refusing lifecycle operation: {{ operation_guard_sensitive_file }} must be
+      a regular controller-owned file with mode 0600.

@@ -1,0 +1,316 @@
+---
+- name: Validate cluster health inputs
+  ansible.builtin.assert:
+    that:
+      - cluster_health_kubeconfig is string
+      - cluster_health_kubeconfig | length > 0
+      - cluster_health_kubectl is string
+      - cluster_health_expected_servers is sequence
+      - cluster_health_expected_servers is not string
+      - cluster_health_expected_servers | length == 3
+      - cluster_health_expected_unschedulable is sequence
+      - cluster_health_expected_unschedulable is not string
+      - cluster_health_expected_unschedulable | difference(cluster_health_expected_servers) | length == 0
+      - cluster_health_mode in ['populated', 'bare_upgrade']
+      - cluster_health_required_controllers is sequence
+      - cluster_health_required_controllers is not string
+      - cluster_health_expected_k3s_versions is sequence
+      - cluster_health_expected_k3s_versions is not string
+    fail_msg: Cluster health inputs are incomplete or unsafe.
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Validate exact bare-upgrade health inputs
+  ansible.builtin.assert:
+    that:
+      - cluster_health_etcdctl is string
+      - cluster_health_etcdctl | length > 0
+      - cluster_health_etcd_host is string
+      - cluster_health_etcd_host | length > 0
+      - cluster_health_expected_member_names is sequence
+      - cluster_health_expected_member_names is not string
+      - cluster_health_expected_member_names | sort == cluster_health_expected_servers | sort
+      - cluster_health_expected_etcd_versions is sequence
+      - cluster_health_expected_etcd_versions is not string
+      - cluster_health_expected_etcd_versions | length > 0
+    fail_msg: Bare-upgrade etcd verification inputs are incomplete or unsafe.
+  when: cluster_health_mode == 'bare_upgrade'
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Read Kubernetes node state as JSON
+  ansible.builtin.command:
+    argv: ["{{ cluster_health_kubectl }}", "--kubeconfig", "{{ cluster_health_kubeconfig }}", get, nodes, --output=json]
+  register: cluster_health_nodes_command
+  changed_when: false
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Parse Kubernetes node state
+  ansible.builtin.set_fact:
+    cluster_health_nodes: "{{ cluster_health_nodes_command.stdout | from_json }}"
+  delegate_to: localhost
+  delegate_facts: true
+  become: false
+  run_once: true
+
+- name: Derive node health facts
+  ansible.builtin.set_fact:
+    cluster_health_node_names: "{{ cluster_health_nodes['items'] | map(attribute='metadata.name') | list }}"
+    cluster_health_node_versions: "{{ cluster_health_nodes['items'] | map(attribute='status.nodeInfo.kubeletVersion') | list }}"
+    cluster_health_ready_nodes: >-
+      {{ cluster_health_nodes | json_query("items[?status.conditions[?type=='Ready' && status=='True']].metadata.name") }}
+    cluster_health_unschedulable_nodes: >-
+      {{ cluster_health_nodes['items'] | selectattr('spec.unschedulable', 'defined') | selectattr('spec.unschedulable') | map(attribute='metadata.name') | list }}
+  delegate_to: localhost
+  delegate_facts: true
+  become: false
+  run_once: true
+
+- name: Require exact Ready node membership and permitted cordon state
+  ansible.builtin.assert:
+    that:
+      - hostvars['localhost'].cluster_health_node_names | sort == cluster_health_expected_servers | sort
+      - hostvars['localhost'].cluster_health_ready_nodes | sort == cluster_health_expected_servers | sort
+      - hostvars['localhost'].cluster_health_unschedulable_nodes | sort == cluster_health_expected_unschedulable | sort
+    fail_msg: Expected nodes are not exactly present and Ready, or have an unsafe cordon state.
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Require only inventory-approved Kubernetes versions and no unexpected skew
+  ansible.builtin.assert:
+    that:
+      - hostvars['localhost'].cluster_health_node_versions | difference(cluster_health_expected_k3s_versions) | length == 0
+      - cluster_health_expected_k3s_versions | length != 1 or (hostvars['localhost'].cluster_health_node_versions | unique | sort == cluster_health_expected_k3s_versions | unique | sort)
+    fail_msg: Kubernetes node versions are outside the approved bridge or unexpectedly skewed.
+  when: cluster_health_expected_k3s_versions | length > 0
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Read Kubernetes API version as JSON
+  ansible.builtin.command:
+    argv: ["{{ cluster_health_kubectl }}", "--kubeconfig", "{{ cluster_health_kubeconfig }}", version, --output=json]
+  register: cluster_health_version_command
+  changed_when: false
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Require API version within the approved bridge
+  ansible.builtin.assert:
+    that:
+      - cluster_health_version_command.rc == 0
+      - (cluster_health_version_command.stdout | from_json).serverVersion.gitVersion in cluster_health_expected_k3s_versions
+    fail_msg: Kubernetes API version is outside the approved bridge.
+  when: cluster_health_expected_k3s_versions | length > 0
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Read API readiness
+  ansible.builtin.command:
+    argv: ["{{ cluster_health_kubectl }}", "--kubeconfig", "{{ cluster_health_kubeconfig }}", get, "--raw=/readyz?verbose"]
+  register: cluster_health_readyz
+  changed_when: false
+  retries: 30
+  delay: 10
+  until:
+    - cluster_health_readyz.rc == 0
+    - "'failed' not in (cluster_health_readyz.stdout | lower)"
+    - "'not ok' not in (cluster_health_readyz.stdout | lower)"
+    - "'etcd' in (cluster_health_readyz.stdout | lower)"
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Require API and embedded-etcd readiness
+  ansible.builtin.assert:
+    that:
+      - cluster_health_readyz.rc == 0
+      - "'etcd' in (cluster_health_readyz.stdout | lower)"
+      - "'ok' in (cluster_health_readyz.stdout | lower)"
+      - "'failed' not in (cluster_health_readyz.stdout | lower)"
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Read pod state as JSON
+  ansible.builtin.command:
+    argv: ["{{ cluster_health_kubectl }}", "--kubeconfig", "{{ cluster_health_kubeconfig }}", get, pods, --all-namespaces, --output=json]
+  register: cluster_health_pods_command
+  changed_when: false
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Parse pod state
+  ansible.builtin.set_fact:
+    cluster_health_pods: "{{ cluster_health_pods_command.stdout | from_json }}"
+    cluster_health_nonterminal_pods: >-
+      {{ cluster_health_pods_command.stdout | from_json | json_query("items[?status.phase!='Succeeded' && status.phase!='Failed']") }}
+    cluster_health_ready_pods: >-
+      {{ cluster_health_pods_command.stdout | from_json | json_query("items[?status.phase!='Succeeded' && status.phase!='Failed' && status.conditions[?type=='Ready' && status=='True']]") }}
+  delegate_to: localhost
+  delegate_facts: true
+  become: false
+  run_once: true
+
+- name: Require non-terminal pods to be Ready
+  ansible.builtin.assert:
+    that:
+      - hostvars['localhost'].cluster_health_ready_pods | length == hostvars['localhost'].cluster_health_nonterminal_pods | length
+    fail_msg: A non-terminal pod is not Ready.
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Read Cilium daemonset health
+  ansible.builtin.command:
+    argv: ["{{ cluster_health_kubectl }}", "--kubeconfig", "{{ cluster_health_kubeconfig }}", --namespace, kube-system, get, daemonset, cilium, --output=json]
+  register: cluster_health_cilium_command
+  changed_when: false
+  retries: 30
+  delay: 10
+  until:
+    - cluster_health_cilium_command.rc == 0
+    - (cluster_health_cilium_command.stdout | from_json).status.numberReady | default(0) | int == cluster_health_expected_servers | length
+    - (cluster_health_cilium_command.stdout | from_json).status.numberAvailable | default(0) | int == cluster_health_expected_servers | length
+  when: "'cilium' in cluster_health_required_controllers"
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Require exact Cilium daemonset health
+  ansible.builtin.assert:
+    that:
+      - cluster_health_cilium_command.rc == 0
+      - (cluster_health_cilium_command.stdout | from_json).status.desiredNumberScheduled | int == cluster_health_expected_servers | length
+      - (cluster_health_cilium_command.stdout | from_json).status.currentNumberScheduled | int == cluster_health_expected_servers | length
+      - (cluster_health_cilium_command.stdout | from_json).status.numberReady | int == cluster_health_expected_servers | length
+      - (cluster_health_cilium_command.stdout | from_json).status.numberAvailable | int == cluster_health_expected_servers | length
+      - (cluster_health_cilium_command.stdout | from_json).status.updatedNumberScheduled | int == cluster_health_expected_servers | length
+    fail_msg: Cilium is not healthy on every expected server.
+  when: "'cilium' in cluster_health_required_controllers"
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Read Argo Applications
+  ansible.builtin.command:
+    argv: ["{{ cluster_health_kubectl }}", "--kubeconfig", "{{ cluster_health_kubeconfig }}", get, applications.argoproj.io, --all-namespaces, --output=json]
+  register: cluster_health_applications
+  changed_when: false
+  failed_when: false
+  when: cluster_health_mode == 'bare_upgrade'
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Permit an absent Applications CRD but reject application objects
+  ansible.builtin.assert:
+    that:
+      - cluster_health_applications.rc == 0 or 'not found' in (cluster_health_applications.stderr | lower)
+      - cluster_health_applications.rc != 0 or (cluster_health_applications.stdout | from_json)['items'] | length == 0
+    fail_msg: Bare upgrade cluster must contain no Argo Applications.
+  when: cluster_health_mode == 'bare_upgrade'
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Read persistent volume claims
+  ansible.builtin.command:
+    argv: ["{{ cluster_health_kubectl }}", "--kubeconfig", "{{ cluster_health_kubeconfig }}", get, pvc, --all-namespaces, --output=json]
+  register: cluster_health_pvcs
+  changed_when: false
+  when: cluster_health_mode == 'bare_upgrade'
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Require bare upgrade cluster to contain no PVCs
+  ansible.builtin.assert:
+    that:
+      - cluster_health_pvcs.rc == 0
+      - (cluster_health_pvcs.stdout | from_json)['items'] | length == 0
+    fail_msg: Bare upgrade cluster must contain no persistent volume claims.
+  when: cluster_health_mode == 'bare_upgrade'
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Read exact embedded-etcd endpoint versions
+  ansible.builtin.command:
+    argv:
+      - "{{ cluster_health_etcdctl }}"
+      - --endpoints=https://127.0.0.1:2379
+      - --cacert=/var/lib/rancher/k3s/server/tls/etcd/server-ca.crt
+      - --cert=/var/lib/rancher/k3s/server/tls/etcd/client.crt
+      - --key=/var/lib/rancher/k3s/server/tls/etcd/client.key
+      - endpoint
+      - status
+      - --cluster
+      - --write-out=json
+  register: cluster_health_etcd_status_command
+  changed_when: false
+  retries: 30
+  delay: 10
+  until:
+    - cluster_health_etcd_status_command.rc == 0
+    - (cluster_health_etcd_status_command.stdout | from_json) | length == cluster_health_expected_servers | length
+  when: cluster_health_mode == 'bare_upgrade'
+  delegate_to: "{{ cluster_health_etcd_host }}"
+  become: true
+
+- name: Read exact embedded-etcd membership
+  ansible.builtin.command:
+    argv:
+      - "{{ cluster_health_etcdctl }}"
+      - --endpoints=https://127.0.0.1:2379
+      - --cacert=/var/lib/rancher/k3s/server/tls/etcd/server-ca.crt
+      - --cert=/var/lib/rancher/k3s/server/tls/etcd/client.crt
+      - --key=/var/lib/rancher/k3s/server/tls/etcd/client.key
+      - member
+      - list
+      - --write-out=json
+  register: cluster_health_etcd_members_command
+  changed_when: false
+  retries: 30
+  delay: 10
+  until:
+    - cluster_health_etcd_members_command.rc == 0
+    - (cluster_health_etcd_members_command.stdout | from_json).members | length == cluster_health_expected_servers | length
+  when: cluster_health_mode == 'bare_upgrade'
+  delegate_to: "{{ cluster_health_etcd_host }}"
+  become: true
+
+- name: Normalize exact embedded-etcd version facts
+  ansible.builtin.set_fact:
+    cluster_health_etcd_versions: >-
+      {{ (cluster_health_etcd_status_command.stdout | from_json)
+      | map(attribute='Status.version') | map('regex_replace', '^v', '') | list }}
+    cluster_health_expected_etcd_versions_normalized: >-
+      {{ cluster_health_expected_etcd_versions | map('regex_replace', '^v', '') | list }}
+  when: cluster_health_mode == 'bare_upgrade'
+  delegate_to: localhost
+  delegate_facts: true
+  become: false
+  run_once: true
+
+- name: Require exact voting embedded-etcd membership and versions
+  ansible.builtin.assert:
+    that:
+      - hostvars['localhost'].cluster_health_etcd_versions | difference(hostvars['localhost'].cluster_health_expected_etcd_versions_normalized) | length == 0
+      - hostvars['localhost'].cluster_health_expected_etcd_versions_normalized | difference(hostvars['localhost'].cluster_health_etcd_versions) | length == 0
+      - (cluster_health_etcd_members_command.stdout | from_json).members | selectattr('isLearner', 'equalto', false) | list | length == 3
+      - (cluster_health_etcd_members_command.stdout | from_json).members | selectattr('isLearner', 'equalto', true) | list | length == 0
+      - (cluster_health_etcd_members_command.stdout | from_json).members | map(attribute='name') | list | sort == cluster_health_expected_member_names | sort
+    fail_msg: Embedded etcd does not have exactly the approved voting membership and version.
+  when: cluster_health_mode == 'bare_upgrade'
+  delegate_to: localhost
+  become: false
+  run_once: true

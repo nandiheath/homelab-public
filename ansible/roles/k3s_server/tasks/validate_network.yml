@@ -1,0 +1,99 @@
+---
+- name: Require explicit K3s server network inputs
+  ansible.builtin.assert:
+    that:
+      - cluster_cidr is string
+      - cluster_cidr | length > 0
+      - service_cidr is string
+      - service_cidr | length > 0
+      - cluster_dns is string
+      - cluster_dns | length > 0
+      - extra_server_args is not defined
+    fail_msg: Explicit K3s server network inputs are incomplete or use the removed legacy argument contract.
+
+- name: Validate the K3s IPv4 network contract before installer mutation
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/python3
+      - -c
+      - |
+        import ipaddress
+        import json
+        import sys
+
+        cluster_network = ipaddress.ip_network(sys.argv[1], strict=True)
+        service_network = ipaddress.ip_network(sys.argv[2], strict=True)
+        dns_address = ipaddress.ip_address(sys.argv[3])
+        server_addresses = [
+            ipaddress.ip_address(address)
+            for address in json.loads(sys.argv[4])
+        ]
+
+        if cluster_network.version != 4 or service_network.version != 4:
+            raise ValueError("K3s cluster and service CIDRs must be IPv4")
+        if dns_address.version != 4:
+            raise ValueError("K3s cluster DNS must be IPv4")
+        if any(address.version != 4 for address in server_addresses):
+            raise ValueError("K3s server addresses must be IPv4")
+        if cluster_network.overlaps(service_network):
+            raise ValueError("K3s cluster and service CIDRs must not overlap")
+        if dns_address not in service_network:
+            raise ValueError("K3s cluster DNS must belong to the service CIDR")
+        if dns_address in {
+            service_network.network_address,
+            service_network.broadcast_address,
+        }:
+            raise ValueError("K3s cluster DNS must be a usable service address")
+        for address in server_addresses:
+            if address in cluster_network or address in service_network:
+                raise ValueError(
+                    f"K3s server address {address} overlaps a cluster network"
+                )
+      - "{{ cluster_cidr }}"
+      - "{{ service_cidr }}"
+      - "{{ cluster_dns }}"
+      - >-
+        [
+        {% for server in groups['server'] %}
+          {{ (hostvars[server].ansible_host | default(server)) | to_json }}{% if not loop.last %},{% endif %}
+        {% endfor %}
+        ]
+  changed_when: false
+
+- name: Compose the closed role-owned K3s server arguments
+  ansible.builtin.set_fact:
+    k3s_server_common_args:
+      - --cluster-cidr
+      - "{{ cluster_cidr }}"
+      - --service-cidr
+      - "{{ service_cidr }}"
+      - --cluster-dns
+      - "{{ cluster_dns }}"
+      - --disable
+      - traefik
+      - --disable-network-policy
+      - --disable
+      - servicelb
+      - --disable-kube-proxy
+      - --flannel-backend=none
+
+- name: Reject overrides of the closed K3s server argument contract
+  ansible.builtin.assert:
+    that:
+      - >-
+        k3s_server_common_args
+        == [
+          '--cluster-cidr', cluster_cidr,
+          '--service-cidr', service_cidr,
+          '--cluster-dns', cluster_dns,
+          '--disable', 'traefik',
+          '--disable-network-policy',
+          '--disable', 'servicelb',
+          '--disable-kube-proxy',
+          '--flannel-backend=none'
+        ]
+      - >-
+        k3s_server_common_args
+        | select('match', '^--(?:cluster-init|server|token(?:-file)?)(?:=|$)')
+        | list | length == 0
+    fail_msg: K3s join, init, server, and token arguments are role-owned and cannot be overridden.

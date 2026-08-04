@@ -1,0 +1,34 @@
+---
+- name: Validate exact upgrade verification inputs
+  ansible.builtin.assert:
+    that:
+      - k3s_upgrade_kubeconfig is string
+      - k3s_upgrade_kubeconfig | length > 0
+      - k3s_upgrade_kubectl is string
+      - k3s_upgrade_expected_servers | length == 3
+      - k3s_upgrade_source_version in k3s_releases
+      - k3s_upgrade_target_version in k3s_releases
+      - hostvars['localhost'].node_maintenance_peer is defined
+    fail_msg: Upgrade verification inputs are incomplete or unsafe.
+  delegate_to: localhost
+  become: false
+
+- name: Verify exact post-upgrade cluster transaction
+  ansible.builtin.include_role:
+    name: cluster_health
+  vars:
+    cluster_health_kubeconfig: "{{ k3s_upgrade_kubeconfig }}"
+    cluster_health_kubectl: "{{ k3s_upgrade_kubectl }}"
+    cluster_health_expected_servers: "{{ k3s_upgrade_expected_servers }}"
+    cluster_health_expected_member_names: "{{ k3s_upgrade_expected_member_names }}"
+    cluster_health_expected_unschedulable: ["{{ inventory_hostname }}"]
+    cluster_health_expected_k3s_versions:
+      - "{{ k3s_upgrade_source_version }}"
+      - "{{ k3s_upgrade_target_version }}"
+    cluster_health_expected_etcd_versions:
+      - "{{ k3s_releases[k3s_upgrade_source_version].etcd_version }}"
+      - "{{ k3s_releases[k3s_upgrade_target_version].etcd_version }}"
+    cluster_health_etcdctl: "{{ k3s_upgrade_etcdctl }}"
+    cluster_health_etcd_host: "{{ hostvars['localhost'].node_maintenance_peer }}"
+    cluster_health_mode: bare_upgrade
+    cluster_health_required_controllers: [cilium]

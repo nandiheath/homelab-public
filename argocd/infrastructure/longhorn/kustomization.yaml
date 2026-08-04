@@ -21,3 +21,5 @@ helmCharts:
       persistence:
         defaultClass: false
         defaultClassReplicaCount: 2
+      defaultSettings:
+        nodeDrainPolicy: block-for-eviction
