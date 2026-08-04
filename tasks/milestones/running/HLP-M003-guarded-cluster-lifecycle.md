@@ -11,6 +11,7 @@ Deliver the fail-closed three-server K3s rebuild lifecycle, its numbered operato
 
 - [ ] HLP-005 — Clean latest-minor cluster rebuild
 - [ ] HLP-020 — Numbered cluster bootstrap guide
+- [ ] HLP-021 — Install pinned Ansible collections in CI
 
 ## Acceptance criteria
 
