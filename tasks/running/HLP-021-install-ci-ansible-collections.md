@@ -8,6 +8,9 @@
 ## Owned paths
 
 - `.github/workflows/render.yaml`
+- `argocd/infrastructure/argocd/values.yaml`
+- `scripts/render.sh`
+- `scripts/validate.sh`
 - `tasks/planned/HLP-021-install-ci-ansible-collections.md`
 - `tasks/running/HLP-021-install-ci-ansible-collections.md`
 
@@ -17,12 +20,13 @@ Make the authoritative GitHub Actions lifecycle validation resolve every pinned 
 
 ## Implementation
 
-Install `ansible/collections/requirements.yml` with `ansible-galaxy` after the pinned Ansible tools are installed and before `validate-ansible.sh` runs.
+Install `ansible/collections/requirements.yml` with `ansible-galaxy` after the pinned Ansible tools are installed and before `validate-ansible.sh` runs. Make authoritative validation render from canonical public defaults instead of workstation-local identifiers, then normalize and validate the Argo RBAC GitHub username so clean CI and local validation converge.
 
 ## Acceptance criteria
 
 - GitHub Actions installs `ansible.posix` at the repository-pinned version.
 - `validate-ansible.sh` resolves `ansible.posix.sysctl` in a clean runner.
+- A clean default render preserves the canonical unquoted Argo RBAC GitHub username.
 - The full pull-request validation check passes.
 
 ## Verification

@@ -17,7 +17,7 @@ done
 
 actionlint
 shellcheck -x scripts/*.sh
-./scripts/render.sh --all --infra
+HOMELAB_RENDER_CANONICAL=true ./scripts/render.sh --all --infra
 kubeconform \
   -strict \
   -summary \

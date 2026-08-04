@@ -46,7 +46,7 @@ configs:
           clientSecret: $argocd-github-app:githubAppClientSecret
       
   rbac:
-    # RBAC configuration - grant admin rights to nandi0315@gmail.com
+    # RBAC configuration for the configured GitHub administrator identity.
     policy.csv: |
       g, $ARGOCD_ADMIN_GITHUB_USER, role:admin
     # The scopes to examine during authentication, allow us to specify the admin users
