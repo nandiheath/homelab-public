@@ -1,6 +1,6 @@
 # HLP-023 — Adopt CLI-owned CI rendering
 
-- Status: running
+- Status: ready-for-rollup
 - Owner: Main
 - Milestone: HLP-M005
 - Depends on: none
@@ -25,13 +25,13 @@ Reduce the public render workflow to the released CLI's CI mode while retaining 
 
 ## Implementation
 
-1. Pin the released CLI with `--ci` and explicit commit-and-push support, replace workflow-side Git orchestration with one CLI invocation, and update operator documentation.
+1. Pin the released CLI, replace workflow-side change detection and Git scripts with `--ci` and `--commit-and-push` invocations separated by repository validation, and update operator documentation.
 
 ## Acceptance criteria
 
-- [ ] The workflow contains no custom changed-source loop or Git commit/push script.
-- [ ] Source changes and deletions update only their matching artifact directories.
-- [ ] No-change and generated-only runs create no additional commit.
+- [x] The workflow contains no custom changed-source loop or Git commit/push script.
+- [x] Source changes and deletions update only their matching artifact directories.
+- [x] No-change and generated-only runs create no additional commit.
 
 ## Verification
 
@@ -45,7 +45,7 @@ Reduce the public render workflow to the released CLI's CI mode while retaining 
 
 ## Completion handoff
 
-- Summary:
-- Files changed:
-- Observed verification:
-- Follow-ups:
+- Summary: Pinned `homelab-0.3.2` and reduced the public workflow to CLI-owned changed-source rendering and explicit artifact commit/push calls, retaining lifecycle and manifest validation between them.
+- Files changed: `.github/workflows/render.yaml`; `PROJECT_STATUS.md`; `README.md`; `bin/homelab`; `bin/.homelab-0.3.2.pkg`; task contracts.
+- Observed verification: `make render` preserved `artifacts/`; `make validate` passed 50 Ansible files, lifecycle fixtures, and 352 rendered resources with 245 valid, 0 invalid, 0 errors, and 107 schema skips. Pull-request run `30881674044` rendered a changed Cilium source and pushed bot artifact commit `a09dd3084c8c1183e9a158745ef05d9fd4b1a807`; cleanup run `30881904983` pushed the inverse artifact commit. Generated-only workflow-dispatch run `30882148108` succeeded at head `0f3e97def2b12436289fe98d997afa596e179ec5` without changing the branch head.
+- Follow-ups: None.
