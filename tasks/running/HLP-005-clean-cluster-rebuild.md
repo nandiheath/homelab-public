@@ -54,7 +54,7 @@ Update the operator runbook and lifecycle skill for the direct `v1.36.2+k3s1` in
 
 ## Blockers
 
-- Private Cilium is healthy and every node is Ready, but the live ConfigMap intentionally has Hubble TLS disabled and the Hubble Certificate remains omitted. Proceed directly to the separately guarded GitOps phase; it requires a fresh exact current-session authorization and must restore the final TLS-enabled desired state.
+- Private Cilium is healthy and every node is Ready, but the live ConfigMap intentionally has Hubble TLS disabled and the Hubble Certificate remains omitted. The operator chose to stop at this temporary boundary instead of authorizing GitOps. HLP-005 remains blocked until a fresh exact `BOOTSTRAP <cluster-id>` authorization restores the final TLS-enabled desired state.
 
 ## Completion handoff
 
