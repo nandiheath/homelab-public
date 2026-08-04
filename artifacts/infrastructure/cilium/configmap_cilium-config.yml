@@ -1,5 +1,4 @@
 ---
-# Temporary CI artifact-only probe; removed after workflow verification.
 apiVersion: v1
 data:
   agent-not-ready-taint-key: node.cilium.io/agent-not-ready
