@@ -10,13 +10,13 @@ Deliver the fail-closed three-server K3s rebuild lifecycle, its numbered operato
 ## Tasks
 
 - [ ] HLP-005 — Clean latest-minor cluster rebuild
-- [ ] HLP-020 — Numbered cluster bootstrap guide
-- [ ] HLP-021 — Install pinned Ansible collections in CI
+- [x] HLP-020 — Numbered cluster bootstrap guide
+- [x] HLP-021 — Install pinned Ansible collections in CI
 
 ## Acceptance criteria
 
-- [ ] Offline lifecycle, rendered manifests, and public/private repository graph pass their authoritative validation.
-- [ ] Numbered documentation distinguishes initial bootstrap, destructive rebuild, final acceptance, and currently disabled upgrades, including every temporary unsafe boundary.
+- [x] Offline lifecycle, rendered manifests, and public/private repository graph pass their authoritative validation.
+- [x] Numbered documentation distinguishes initial bootstrap, destructive rebuild, final acceptance, and currently disabled upgrades, including every temporary unsafe boundary.
 - [ ] The live cluster reaches final GitOps-owned desired state with Hubble TLS restored, expected Applications and PVCs healthy, smoke checks clean, and no credential residue.
 
 ## Verification
