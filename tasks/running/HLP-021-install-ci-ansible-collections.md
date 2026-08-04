@@ -20,7 +20,7 @@ Make the authoritative GitHub Actions lifecycle validation resolve every pinned 
 
 ## Implementation
 
-Install `ansible/collections/requirements.yml` with `ansible-galaxy` after the pinned Ansible tools are installed and before `validate-ansible.sh` runs. Make authoritative validation render from canonical public defaults instead of workstation-local identifiers, then normalize and validate the Argo RBAC GitHub username so clean CI and local validation converge.
+Install `ansible/collections/requirements.yml` with `ansible-galaxy` before `validate-ansible.sh`. Make authoritative validation use canonical public identifiers, validate the Argo RBAC GitHub username, and keep placeholder replacement compatible with controller Bash 3.2 and GitHub Actions Bash 5 so both render the same artifact.
 
 ## Acceptance criteria
 

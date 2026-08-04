@@ -149,9 +149,9 @@ interpolate_manifests() {
     content=$(<"$src_file")
     for variable in "${SUBSTITUTION_VARIABLES[@]}"; do
       placeholder="\${${variable}}"
-      content="${content//"$placeholder"/"${!variable}"}"
+      content="${content//"$placeholder"/${!variable}}"
       placeholder="\$${variable}"
-      content="${content//"$placeholder"/"${!variable}"}"
+      content="${content//"$placeholder"/${!variable}}"
     done
     printf '%s\n' "$content" > "$dst_file"
   done < <(find "$src_dir" -type f \( -name "*.yaml" -o -name "*.yml" -o -name "*.json" \) -print0)
