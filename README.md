@@ -6,7 +6,7 @@ This repository is the public, reproducible half of a Kubernetes homelab. It dec
 
 ```mermaid
 flowchart LR
-  M[argocd/infrastructure] --> R[homelab render]
+  M[argocd/infrastructure] --> R[homelab argocd render]
   R --> A[artifacts/infrastructure]
   A --> G[Argo CD]
   G --> K[K3s cluster]
@@ -23,8 +23,8 @@ The infrastructure root creates Argo CD Applications for Argo CD, Cilium, Extern
 | --- | --- |
 | `argocd/infrastructure/` | Kustomize source for public cluster infrastructure. |
 | `artifacts/infrastructure/` | Committed, rendered Kubernetes manifests consumed by GitOps. Do not edit manually. |
-| `homelab render` | Hermit-managed renderer that runs Kustomize and writes `artifacts/`. |
-| `scripts/validate.sh` | Local validation: actionlint, shellcheck, render, and kubeconform. |
+| `Makefile` | Local wrapper for the pinned `homelab argocd render` command and repository validation. |
+| `scripts/validate.sh` | Local validation: actionlint, shellcheck, and kubeconform. |
 | `scripts/bootstrap.sh` | Legacy live-cluster bootstrap helper. It needs local credentials and mutates a cluster. |
 | `ansible/` | K3s node provisioning, upgrades, recovery, and GitOps bootstrap playbooks. |
 | `docs/bootstrap/` | Numbered agent guide for initial host bootstrap, destructive rebuild, final acceptance, and guarded upgrades. |
@@ -39,10 +39,11 @@ Install the pinned Hermit tools, then validate in a worktree:
 
 ```bash
 source bin/activate-hermit
-./scripts/validate.sh
+make render
+make validate
 ```
 
-Validation renders infrastructure and rewrites `artifacts/` locally. It does not apply anything to a cluster. Review and commit any intended generated changes with their source change.
+Rendering rewrites `artifacts/` locally and validation does not apply anything to a cluster. Review source changes locally; pull-request CI renders only affected source directories and records any artifact delta as a separate generated commit.
 
 ## Operations
 

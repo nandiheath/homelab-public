@@ -1,12 +1,12 @@
 # Project status
 
-_Last observed: 2026-08-03_
+_Last observed: 2026-08-04_
 
 ## Current state
 
 - Public GitOps desired state lives in `argocd/infrastructure/`; committed render output lives in `artifacts/infrastructure/`.
 - The repository contains Ansible playbooks for host operations and a Kubernetes bootstrap script. They are operational surfaces, not routine validation.
-- HLP-005 remains active and blocked at its separately authorized final GitOps acceptance boundary. HLP-020 is ready for serial rollup after adding the numbered bootstrap guide.
+- HLP-005 remains active and blocked at its separately authorized final GitOps acceptance boundary.
 - HLP-M002 remains a future backup/disaster-recovery planning reminder; it carries no implementation claim and is not evidence of deployed backup infrastructure.
 - Planning is milestone-first: every child task references a parent, and milestone completion requires child rollup plus milestone-level verification.
 
@@ -14,7 +14,7 @@ _Last observed: 2026-08-03_
 
 - `./scripts/validate.sh` completed successfully on 2026-08-02: shell and workflow linting passed; the infrastructure renderer completed; kubeconform reported 350 resources, 243 valid, 0 invalid, 0 errors, and 107 skipped schemas.
 - The milestone-task lifecycle rollout passed `agent-workspace repo-tasks validate --root .` and the full offline repository validator on 2026-08-02.
-- GitHub Actions runs the same command in `.github/workflows/render.yaml` with read-only repository permissions and no deployment step.
+- GitHub Actions validates without deployment credentials or mutation steps. The render workflow has repository-content write permission solely to commit generated artifact deltas back to the triggering branch.
 - K3s installs now export a controller-local, mode-restricted kubeconfig only after the first server API is ready; `fetch_kubeconfig.yaml` reuses that export path and reset removes it once. Static lint and syntax checks, plus GitHub Actions rendering validation, passed on 2026-08-03. Live recovery evidence remains private and is not recorded in this public repository.
 - Public lifecycle foundations now fail closed on host-key checking, cluster/version inventory shape, exact operation confirmations, controller-tool versions, and sensitive controller file permissions. `./scripts/validate.sh` passed on 2026-08-03 (350 resources; 243 valid; 0 invalid; 0 errors).
 - Longhorn desired state and committed render now set `defaultSettings.nodeDrainPolicy: block-for-eviction`; no backup target or recurring backup policy was introduced.
@@ -29,6 +29,7 @@ _Last observed: 2026-08-03_
 - HLP-013 through HLP-018 lifecycle corrections are integrated and ready for serial rollup: kernel activation, clean install membership, bridge upgrades, reset preservation, controller bootstrap, and actual-entrypoint fixture coverage. Focused Ansible validation passed on 2026-08-03 with no live host or cluster contact.
 
 - Latest platform contract now targets direct K3s `v1.36.2+k3s1` with embedded etcd `v3.6.12-k3s1`, official installer and ARM64 checksums, and immutable Cilium `v1.20.0` images compatible with Kubernetes 1.36. `./scripts/validate-ansible.sh`, `./scripts/validate.sh`, offline lifecycle fixtures, and Cilium rendering passed on 2026-08-03 without live infrastructure contact.
+- Released `homelab-0.3.1` is the sole public/private manifest renderer and the private OpenWrt command entrypoint. Public and private Makefile renders preserved existing artifacts; changed-source and artifact-only GitHub Actions probes passed in both repositories. Artifact-only runs skipped rendering, and the public workflow demonstrated a distinct bot-authored artifact commit.
 
 ## Rollup protocol
 
