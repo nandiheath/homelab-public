@@ -6,7 +6,6 @@
 - Depends on: HLP-004
 
 ## Owned paths
-- `AGENTS.md`
 - `ansible/roles/operation_guard/`
 - `ansible/roles/raspi_kernel/`
 - `ansible/roles/raspberry_pi/files/scripts/setup-boot-volume.sh`
@@ -27,7 +26,6 @@
 - `tests/ansible_lifecycle/run-fixtures.sh`
 - `tests/ansible_lifecycle/k3s_network_contract.yml`
 - `tests/ansible_lifecycle/inventory.yml`
-- `docs/operations-runbook.md`
 - `skills/k3s-lifecycle/SKILL.md`
 - `tasks/running/HLP-005-clean-cluster-rebuild.md`
 

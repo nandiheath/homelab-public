@@ -53,12 +53,12 @@ cd "$PUBLIC_REPO"
    ```bash
    ansible-inventory -i "$INVENTORY" --list >/dev/null
    ./scripts/validate-ansible.sh
+   homelab argocd render --all
    ./scripts/validate.sh
    cd "$PRIVATE_REPO"
    . ./bin/activate-hermit
+   make render
    make validate
-   ./scripts/render.sh --all --application
-   ./scripts/render.sh --all --infra
    "$PUBLIC_REPO/scripts/validate-repository-graph.sh" "$PRIVATE_REPO"
    cd "$PUBLIC_REPO"
    . ./bin/activate-hermit

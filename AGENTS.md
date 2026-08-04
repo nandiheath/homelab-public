@@ -14,8 +14,8 @@
 
 - `argocd/infrastructure/` — kustomize source for the cluster's public desired state.
 - `artifacts/infrastructure/` — committed render output; source changes that affect it must update it.
-- `homelab render` — local renderer provided by the Hermit-managed `homelab` CLI. It rewrites `artifacts/`.
-- `scripts/validate.sh` — authoritative offline validation: actionlint, shellcheck, render, and kubeconform.
+- `homelab argocd render` — Hermit-managed renderer for Kustomize sources; it rewrites the selected committed artifact directory.
+- `scripts/validate.sh` — authoritative offline validation: actionlint, shellcheck, and kubeconform.
 - `ansible/` — host bootstrap and maintenance playbooks. These target real hosts when run.
 - `scripts/bootstrap.sh` — applies to a live Kubernetes cluster and reads 1Password credentials; never run without explicit user authorization.
 - `scripts/validate-repository-graph.sh` — cross-repository check; requires the private repository and its denylist.
@@ -25,12 +25,13 @@
 
 ```bash
 source bin/activate-hermit
+homelab argocd render --all
 ./scripts/validate.sh
 ```
 
-`./scripts/validate.sh` uses only local tooling and writes generated files under `artifacts/`; it does not contact a cluster. Run it in the task worktree, inspect and include intended generated changes, and never run it concurrently against the same worktree.
+Rendering uses only local tooling and writes generated files under `artifacts/`; it does not contact a cluster. Run it in the task worktree and never run it concurrently against the same worktree. CI starts from a clean checkout, renders only source directories changed by the triggering commit range, validates the result, and commits artifact changes as a distinct follow-up commit.
 
-For a focused render, use `homelab render --path argocd/infrastructure/<name> --output artifacts/infrastructure/<name>`. It rewrites that output directory.
+For a focused render, use `homelab argocd render --path argocd/infrastructure/<name> --output artifacts/infrastructure/<name>`. It atomically replaces that output directory.
 
 ## Safety gates
 
@@ -38,5 +39,5 @@ For a focused render, use `homelab render --path argocd/infrastructure/<name> --
 - Do not read, add, print, or commit `credentials/`, `config/.env`, Terraform state, or other ignored secrets.
 - Preserve the public/private boundary. Cross-repository validation requires the private repository only when explicitly authorized and available.
 - Keep home-network addresses, hostnames, topology, and firewall policy in the private repository and global knowledge reference. Public documentation, inventory examples, fixtures, and tests must use documentation-safe values and generic identities.
-- Do not change generated artifacts by hand when `homelab render` can produce them.
+- Do not change generated artifacts by hand when `homelab argocd render` can produce them.
 - Do not claim overlapping paths or edit another active task's owned paths.
