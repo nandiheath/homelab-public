@@ -745,8 +745,7 @@
           delay: 10
           until:
             - network_cilium_status.rc == 0
-            - "'Kubernetes: Ok' in network_cilium_status.stdout"
-            - "'Cilium: Ok' in network_cilium_status.stdout"
+            - network_cilium_status.stdout | trim == 'OK'
           loop: "{{ network_cilium_pods_command.stdout_lines }}"
           loop_control:
             label: "{{ item }}"
