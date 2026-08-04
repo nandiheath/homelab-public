@@ -43,7 +43,7 @@ make render
 make validate
 ```
 
-Rendering rewrites `artifacts/` locally and validation does not apply anything to a cluster. Review source changes locally; pull-request CI renders only affected source directories and records any artifact delta as a separate generated commit.
+Rendering rewrites `artifacts/` locally and validation does not apply anything to a cluster. Pull-request CI delegates changed-source discovery to `homelab argocd render --ci`, validates the result, then uses `--commit-and-push` to record an artifact-only follow-up commit on the same branch.
 
 ## Operations
 

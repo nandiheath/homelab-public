@@ -38,52 +38,8 @@ jobs:
       - name: Install pinned Ansible collections
         run: ansible-galaxy collection install -r ansible/collections/requirements.yml -p ansible/collections
 
-      - name: Require a clean pre-render checkout
-        run: |
-          if [ -n "$(git status --porcelain)" ]; then
-            echo "checkout contains uncommitted changes before rendering" >&2
-            git status --short >&2
-            exit 1
-          fi
-
       - name: Render changed manifest sources
-        env:
-          EVENT_BEFORE: ${{ github.event.before }}
-          PULL_REQUEST_BASE: ${{ github.event.pull_request.base.sha }}
-        run: |
-          base=$EVENT_BEFORE
-          if [ -z "$base" ] || [ "$base" = 0000000000000000000000000000000000000000 ]; then
-            base=$PULL_REQUEST_BASE
-          fi
-          if [ -z "$base" ]; then
-            base=HEAD^
-          fi
-          if ! git cat-file -e "$base^{commit}" 2>/dev/null; then
-            git fetch --no-tags --depth=1 origin "$base"
-          fi
-
-          declare -A changed_sources=()
-          while IFS= read -r -d '' changed_file; do
-            relative=${changed_file#argocd/infrastructure/}
-            source_name=${relative%%/*}
-            if [ -n "$source_name" ] && [ "$source_name" != "$relative" ]; then
-              changed_sources["$source_name"]=1
-            fi
-          done < <(git diff --name-only --no-renames -z "$base" HEAD -- argocd/infrastructure/)
-
-          if [ "${#changed_sources[@]}" -eq 0 ]; then
-            echo "No changed manifest sources."
-          else
-            while IFS= read -r source_name; do
-              source_path="argocd/infrastructure/$source_name"
-              output_path="artifacts/infrastructure/$source_name"
-              if [ -f "$source_path/kustomization.yaml" ]; then
-                make render SOURCE="$source_path" OUTPUT="$output_path"
-              else
-                rm -rf "$output_path"
-              fi
-            done < <(printf '%s\n' "${!changed_sources[@]}" | sort)
-          fi
+        run: homelab argocd render --ci
 
       - name: Validate lifecycle automation
         run: ./scripts/validate-ansible.sh
@@ -92,15 +48,4 @@ jobs:
         run: ./scripts/validate.sh
 
       - name: Commit rendered artifacts
-        env:
-          TARGET_BRANCH: ${{ github.head_ref || github.ref_name }}
-        run: |
-          if git diff --quiet -- artifacts/; then
-            echo "Rendered artifacts are current."
-            exit 0
-          fi
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add artifacts/
-          git commit -m "chore(artifacts): render changed manifests"
-          git push origin "HEAD:$TARGET_BRANCH"
+        run: homelab argocd render --commit-and-push
