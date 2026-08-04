@@ -2,6 +2,7 @@
 
 - Status: blocked
 - Owner: Main
+- Milestone: HLP-M003
 - Depends on: HLP-004
 
 ## Owned paths

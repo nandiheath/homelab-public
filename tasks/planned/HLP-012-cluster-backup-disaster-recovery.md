@@ -2,6 +2,7 @@
 
 - Status: planned
 - Owner: unassigned
+- Milestone: HLP-M002
 - Depends on: HLP-011
 
 ## Owned paths
