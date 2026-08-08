@@ -3,11 +3,10 @@ name: Validate desired state
 on:
   pull_request:
   push:
-    branches:
-      - main
   workflow_dispatch:
 
 permissions:
+  actions: write
   contents: write
 
 concurrency:
@@ -25,6 +24,7 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ github.head_ref || github.ref_name }}
+          persist-credentials: ${{ github.event_name != 'pull_request' }}
 
       - name: Activate pinned Hermit toolchain
         uses: cashapp/activate-hermit@cea9af7913204a965fd488637a8d1811bba2e616 # v1
@@ -47,5 +47,29 @@ jobs:
       - name: Validate rendered manifests
         run: ./scripts/validate.sh
 
+      - name: Detect rendered artifact drift
+        id: drift
+        shell: bash
+        run: |
+          if git diff --quiet -- artifacts/ &&
+            test -z "$(git ls-files --others --exclude-standard -- artifacts/)"; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Commit rendered artifacts
+        if: steps.drift.outputs.changed == 'true' && github.event_name != 'pull_request'
         run: homelab argocd render --commit-and-push
+
+      - name: Validate generated commit
+        if: steps.drift.outputs.changed == 'true' && github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run render.yaml --ref "$GITHUB_REF_NAME"
+
+      - name: Fail source-only revision
+        if: steps.drift.outputs.changed == 'true'
+        run: |
+          echo "Rendered artifacts changed; the original source-only revision is invalid." >&2
+          exit 1
