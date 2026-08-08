@@ -208,16 +208,19 @@ Authorization must be exactly:
 BOOTSTRAP <cluster-id>
 ```
 
-Resolve required credential-manifest content through the approved 1Password environment boundary without printing it, then run:
+Resolve required credential-manifest content through the approved 1Password environment boundary without printing it, then run only the released CLI from the controller:
 
 ```bash
-op run -- ansible-playbook -i "$INVENTORY" ansible/playbooks/bootstrap_gitops.yml \
-  -e "kubeconfig=$CONTROLLER_KUBECONFIG" \
-  -e "controller_kubectl=$CONTROLLER_KUBECTL" \
-  -e "{\"operation_guard_confirmation\":\"BOOTSTRAP ${CLUSTER_ID}\"}"
+op run -- homelab bootstrap \
+  --inventory="$INVENTORY" \
+  --public-repository="$PUBLIC_REPOSITORY" \
+  --private-repository="$PRIVATE_REPOSITORY" \
+  --kubeconfig="$CONTROLLER_KUBECONFIG" \
+  --kubectl="$CONTROLLER_KUBECTL" \
+  --authorize="BOOTSTRAP ${CLUSTER_ID}"
 ```
 
-The playbook runs kubectl only on the controller, creates mode-`0600` temporary credential files immediately before no-log apply, and deletes them in `always`. Ordering is Argo CD, External Secrets, 1Password Connect, temporary credentials, repository credentials, public root, then private root. GitOps bootstrap never installs or changes K3s. Its reconciliation must install cert-manager and self-heal Cilium from the unchanged final private artifact, replacing the temporary plaintext Hubble ConfigMap value and creating the omitted Hubble Certificate.
+The CLI delegates to the guarded lifecycle; do not invoke the playbook as an operator entrypoint. It runs kubectl only on the controller, creates mode-`0600` temporary credential files immediately before no-log apply, and deletes them in `always`. Ordering is namespaces; Argo CD, External Secrets, and 1Password Connect; temporary credentials; the private AppProject; the public root; private Cilium; the private root; then the bootstrap ownership root. GitOps bootstrap never installs or changes K3s. Reconciliation must install cert-manager, make the Cilium Application Synced and Healthy, roll out the Cilium DaemonSet, restore `hubble-disable-tls: "false"`, and create the omitted Hubble Certificate.
 
 ## Acceptance
 

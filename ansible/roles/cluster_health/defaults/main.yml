@@ -12,3 +12,4 @@ cluster_health_expected_member_names: []
 cluster_health_expected_etcd_versions: []
 cluster_health_etcdctl: /var/lib/rancher/k3s/data/current/bin/etcdctl
 cluster_health_etcd_host: "{{ cluster_health_expected_servers[0] | default('') }}"
+cluster_health_etcd_become: true

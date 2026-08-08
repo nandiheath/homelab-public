@@ -1,6 +1,6 @@
 # HLP-M003 — Guarded cluster lifecycle
 
-- Status: blocked
+- Status: running
 - Owner: Main
 
 ## Goal
@@ -28,7 +28,7 @@ Deliver the fail-closed three-server K3s rebuild lifecycle, its numbered operato
 
 ## Blockers
 
-- HLP-005 requires a fresh exact GitOps bootstrap authorization and final live acceptance.
+- Offline kubeconfig/bootstrap CLI integration is active. Live GitOps bootstrap still requires a fresh exact authorization after the CLI is released and pinned.
 
 ## Completion handoff
 

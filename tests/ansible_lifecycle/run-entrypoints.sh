@@ -23,8 +23,15 @@ jq -n \
   '{fixture_host_key: $fixture_host_key, fixture_known_hosts_file: $fixture_known_hosts_file}' \
   >"$tmp_dir/fixture-vars.json"
 
-export CONNECT_CREDENTIALS_CONTENT=fixture
-export GITHUB_APP_CREDENTIALS_CONTENT=fixture
+export CONNECT_CREDENTIALS_CONTENT
+CONNECT_CREDENTIALS_CONTENT="$(cat "$fixture_dir/connect-credentials.yaml")"
+export GITHUB_APP_CREDENTIALS_CONTENT
+GITHUB_APP_CREDENTIALS_CONTENT="$(cat "$fixture_dir/github-app-credentials.yaml")"
+export FIXTURE_COMMAND_LOG="$tmp_dir/controller-commands.log"
+export FIXTURE_FAIL_PHASE=
+credential_temp_directory="$tmp_dir/credentials"
+mkdir -m 0700 "$credential_temp_directory"
+: >"$FIXTURE_COMMAND_LOG"
 
 case_output="$tmp_dir/case-output"
 base=(
@@ -92,6 +99,14 @@ network_args=(
   -e cluster_dns=198.19.0.10
 )
 reset_args=(-l localhost -e "kubeconfig=$fixture_kubeconfig" -e controller_kubectl=/bin/false)
+gitops_args=(
+  -e "kubeconfig=$fixture_kubeconfig"
+  -e "controller_kubectl=$fixture_dir/fake-kubectl.sh"
+  -e "private_bootstrap_root=$fixture_dir/bootstrap"
+  -e "etcdctl=$fixture_dir/fake-etcdctl.sh"
+  -e etcd_become=false
+  -e "credential_temp_directory=$credential_temp_directory"
+)
 
 # Every actual mutating entrypoint must reject missing and wrong authorization
 # before contacting a managed host or entering its mutation transaction.
@@ -131,19 +146,137 @@ assert_reject 'network wrong authorization' ansible/playbooks/bootstrap_network.
 assert_reject 'network boolean authorization' ansible/playbooks/bootstrap_network.yaml "${network_args[@]}" -e '{"operation_guard_confirmation":true}'
 assert_reject 'network stale cluster' ansible/playbooks/bootstrap_network.yaml "${network_args[@]}" -e cluster_id=stale-production
 
-assert_reject 'GitOps missing authorization' ansible/playbooks/bootstrap_gitops.yml -e "kubeconfig=$fixture_kubeconfig"
-assert_reject 'GitOps wrong authorization' ansible/playbooks/bootstrap_gitops.yml -e "kubeconfig=$fixture_kubeconfig" -e 'operation_guard_confirmation=NOT AUTHORIZED'
-assert_reject 'GitOps boolean authorization' ansible/playbooks/bootstrap_gitops.yml -e "kubeconfig=$fixture_kubeconfig" -e '{"operation_guard_confirmation":true}'
-assert_reject 'GitOps stale cluster' ansible/playbooks/bootstrap_gitops.yml -e "kubeconfig=$fixture_kubeconfig" -e cluster_id=stale-production
+assert_reject 'GitOps missing authorization' ansible/playbooks/bootstrap_gitops.yml "${gitops_args[@]}"
+assert_reject 'GitOps wrong authorization' ansible/playbooks/bootstrap_gitops.yml "${gitops_args[@]}" -e 'operation_guard_confirmation=NOT AUTHORIZED'
+assert_reject 'GitOps boolean authorization' ansible/playbooks/bootstrap_gitops.yml "${gitops_args[@]}" -e '{"operation_guard_confirmation":true}'
+assert_reject 'GitOps stale cluster' ansible/playbooks/bootstrap_gitops.yml "${gitops_args[@]}" -e cluster_id=stale-production
 
-# Accepted entrypoints are listed without execution; the existing operation
-# guard fixture separately reaches its mutation sentinel for exact accepted
-# authorization. This proves the real playbooks include their transaction work.
+# Most accepted entrypoints are listed without execution; the operation guard
+# fixture separately reaches its mutation sentinel. GitOps is exercised below
+# against deterministic fake controller tools because its full ordering and
+# cleanup contract must be observed.
 assert_tasks 'kernel transaction' 'Reboot each node into the pinned kernel' ansible/playbooks/kernel_upgrade.yaml
 assert_tasks 'reboot transaction' 'Reboot node after pinned kernel installation' ansible/playbooks/reboot.yaml
 assert_tasks 'install transaction' 'Install and verify one embedded-etcd server' ansible/playbooks/install.yaml
 assert_tasks 'reset transaction' 'Uninstall the role-owned K3s installation' ansible/playbooks/reset.yaml "${reset_args[@]}"
 assert_tasks 'network transaction' 'Apply temporary Cilium bootstrap artifact from controller' ansible/playbooks/bootstrap_network.yaml "${network_args[@]}"
-assert_tasks 'GitOps transaction' 'Apply GitOps controllers from controller' ansible/playbooks/bootstrap_gitops.yml -e "kubeconfig=$fixture_kubeconfig"
+assert_tasks 'GitOps transaction' 'Apply GitOps controllers from controller' ansible/playbooks/bootstrap_gitops.yml "${gitops_args[@]}"
+
+mutation_phase_pattern='^(namespaces|controllers|credentials|project|public-root|cilium|private-root|ownership-root)\|'
+gitops_authorization=(-e '{"operation_guard_confirmation":"BOOTSTRAP fixture-cluster"}')
+
+assert_credentials_removed() {
+  local files
+  shopt -s nullglob
+  files=("$credential_temp_directory"/*)
+  shopt -u nullglob
+  if ((${#files[@]} != 0)); then
+    printf 'GitOps fixture left temporary credential files behind:\n' >&2
+    printf '  %s\n' "${files[@]}" >&2
+    exit 1
+  fi
+}
+
+assert_before_first_mutation() {
+  local pattern="$1"
+  local first_mutation="$2"
+  local line
+  line="$(grep -n -F -- "$pattern" "$FIXTURE_COMMAND_LOG" | sed -n '1s/:.*//p')"
+  if [[ -z "$line" || "$line" -ge "$first_mutation" ]]; then
+    printf 'Required GitOps preflight did not precede mutation: %s\n' "$pattern" >&2
+    exit 1
+  fi
+}
+
+: >"$FIXTURE_COMMAND_LOG"
+if ! "${base[@]}" ansible/playbooks/bootstrap_gitops.yml \
+  "${gitops_args[@]}" "${gitops_authorization[@]}" >"$case_output" 2>&1; then
+  cat "$case_output" >&2
+  printf 'Accepted GitOps bootstrap fixture failed\n' >&2
+  exit 1
+fi
+assert_credentials_removed
+
+expected_phases=(
+  namespaces
+  controllers
+  credentials
+  project
+  public-root
+  cilium
+  private-root
+  ownership-root
+)
+previous_line=0
+for phase in "${expected_phases[@]}"; do
+  phase_line="$(grep -n -E "^${phase}\\|" "$FIXTURE_COMMAND_LOG" | sed -n '1s/:.*//p')"
+  if [[ -z "$phase_line" || "$phase_line" -le "$previous_line" ]]; then
+    printf 'GitOps mutation phase missing or out of order: %s\n' "$phase" >&2
+    cat "$FIXTURE_COMMAND_LOG" >&2
+    exit 1
+  fi
+  previous_line="$phase_line"
+done
+
+first_mutation="$(grep -n -E "$mutation_phase_pattern" "$FIXTURE_COMMAND_LOG" | sed -n '1s/:.*//p')"
+for preflight in \
+  'version --client --output=yaml' \
+  'config current-context' \
+  'config view --minify' \
+  'get nodes --output=json' \
+  'version --output=json' \
+  'get --raw=/readyz?verbose' \
+  'get pods --all-namespaces --output=json' \
+  'get daemonset cilium --output=json' \
+  'get applications.argoproj.io --all-namespaces --output=json' \
+  'get pvc --all-namespaces --output=json' \
+  'endpoint status --cluster --write-out=json' \
+  'member list --write-out=json'; do
+  assert_before_first_mutation "$preflight" "$first_mutation"
+done
+
+for acceptance_read in \
+  'deployment/argocd-server' \
+  'deployment/external-secrets' \
+  'deployment/onepassword-connect' \
+  'secret/argocd-github-app' \
+  'rollout status daemonset/cilium' \
+  'get configmap cilium-config --output=json' \
+  'get certificates.cert-manager.io hubble-server-certs --output=name' \
+  'application/cilium' \
+  'application/homelab-private' \
+  'get application homelab-bootstrap --output=json'; do
+  if ! grep -Fq -- "$acceptance_read" "$FIXTURE_COMMAND_LOG"; then
+    printf 'GitOps acceptance read is missing: %s\n' "$acceptance_read" >&2
+    exit 1
+  fi
+done
+if grep -Eqi 'metallb|apiservice' "$FIXTURE_COMMAND_LOG"; then
+  printf 'GitOps bootstrap touched forbidden MetalLB or APIService resources\n' >&2
+  exit 1
+fi
+
+for phase in "${expected_phases[@]}"; do
+  : >"$FIXTURE_COMMAND_LOG"
+  if FIXTURE_FAIL_PHASE="$phase" "${base[@]}" ansible/playbooks/bootstrap_gitops.yml \
+    "${gitops_args[@]}" "${gitops_authorization[@]}" >"$case_output" 2>&1; then
+    cat "$case_output" >&2
+    printf 'Injected GitOps mutation failure unexpectedly succeeded: %s\n' "$phase" >&2
+    exit 1
+  fi
+  assert_credentials_removed
+  failed_line="$(grep -n -E "^${phase}\\|" "$FIXTURE_COMMAND_LOG" | sed -n '1s/:.*//p')"
+  if [[ -z "$failed_line" ]]; then
+    printf 'Injected GitOps mutation boundary was not reached: %s\n' "$phase" >&2
+    exit 1
+  fi
+  if sed -n "$((failed_line + 1)),\$p" "$FIXTURE_COMMAND_LOG" |
+    grep -E "$mutation_phase_pattern" |
+    grep -Ev "^${phase}\\|" |
+    grep -q .; then
+    printf 'GitOps continued mutating after injected failure: %s\n' "$phase" >&2
+    exit 1
+  fi
+done
 
 printf 'Lifecycle entrypoint fixtures passed\n'

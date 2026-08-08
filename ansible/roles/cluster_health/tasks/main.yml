@@ -264,7 +264,7 @@
     - (cluster_health_etcd_status_command.stdout | from_json) | length == cluster_health_expected_servers | length
   when: cluster_health_mode == 'bare_upgrade'
   delegate_to: "{{ cluster_health_etcd_host }}"
-  become: true
+  become: "{{ cluster_health_etcd_become }}"
 
 - name: Read exact embedded-etcd membership
   ansible.builtin.command:
@@ -286,7 +286,7 @@
     - (cluster_health_etcd_members_command.stdout | from_json).members | length == cluster_health_expected_servers | length
   when: cluster_health_mode == 'bare_upgrade'
   delegate_to: "{{ cluster_health_etcd_host }}"
-  become: true
+  become: "{{ cluster_health_etcd_become }}"
 
 - name: Normalize exact embedded-etcd version facts
   ansible.builtin.set_fact:

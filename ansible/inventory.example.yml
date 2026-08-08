@@ -16,6 +16,7 @@ k3s_cluster:
     ansible_user: operator
     k3s_install_version: v1.36.2+k3s1
     k3s_target_version: v1.36.2+k3s1
+    controller_kubectl_version: v1.35.2
     k3s_install_script_sha256: d264d4d43f7c5a27b44de0075513fb22dfb02d0b7cd33ba7a3838cb822f4729c
     k3s_releases:
       v1.36.2+k3s1:

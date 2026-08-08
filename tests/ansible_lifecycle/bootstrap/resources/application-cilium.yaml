@@ -1,21 +1,19 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: homelab-private
-  annotations:
-    argocd.argoproj.io/sync-wave: "5"
+  name: cilium
+  namespace: argocd
 spec:
   project: homelab-private
   source:
     repoURL: https://github.com/nandiheath/homelab-private.git
     targetRevision: main
-    path: artifacts/application/application-app-of-apps
-    directory:
-      recurse: true
-      include: '{*.yaml,*.yml}'
+    path: artifacts/infrastructure/cilium
   destination:
     server: https://kubernetes.default.svc
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
+    syncOptions:
+      - ServerSideApply=true
