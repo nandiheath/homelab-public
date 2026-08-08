@@ -4,7 +4,7 @@ _Last observed: 2026-08-04_
 
 ## Current state
 
-- Public GitOps desired state lives in `argocd/infrastructure/`; committed render output lives in `artifacts/infrastructure/`.
+- Public GitOps desired state is discovered recursively below `argocd/`; committed render output mirrors each source-relative path below `artifacts/`. Reusable infrastructure remains public and applications remain private.
 - The repository contains Ansible playbooks for host operations and a Kubernetes bootstrap script. They are operational surfaces, not routine validation.
 - HLP-005 remains active and blocked at its separately authorized final GitOps acceptance boundary.
 - HLP-M002 remains a future backup/disaster-recovery planning reminder; it carries no implementation claim and is not evidence of deployed backup infrastructure.
@@ -14,7 +14,7 @@ _Last observed: 2026-08-04_
 
 - `./scripts/validate.sh` completed successfully on 2026-08-02: shell and workflow linting passed; the infrastructure renderer completed; kubeconform reported 350 resources, 243 valid, 0 invalid, 0 errors, and 107 skipped schemas.
 - The milestone-task lifecycle rollout passed `agent-workspace repo-tasks validate --root .` and the full offline repository validator on 2026-08-02.
-- GitHub Actions validates without deployment credentials or mutation steps. The render workflow has repository-content write permission solely to commit generated artifact deltas back to the triggering branch.
+- GitHub Actions validates without deployment credentials or infrastructure mutation. Pull-request runs never push. Trusted branch runs validate before artifact-only commit-back, dispatch validation for the generated commit, and fail the original source-only revision.
 - K3s installs now export a controller-local, mode-restricted kubeconfig only after the first server API is ready; `fetch_kubeconfig.yaml` reuses that export path and reset removes it once. Static lint and syntax checks, plus GitHub Actions rendering validation, passed on 2026-08-03. Live recovery evidence remains private and is not recorded in this public repository.
 - Public lifecycle foundations now fail closed on host-key checking, cluster/version inventory shape, exact operation confirmations, controller-tool versions, and sensitive controller file permissions. `./scripts/validate.sh` passed on 2026-08-03 (350 resources; 243 valid; 0 invalid; 0 errors).
 - Longhorn desired state and committed render now set `defaultSettings.nodeDrainPolicy: block-for-eviction`; no backup target or recurring backup policy was introduced.
@@ -29,7 +29,8 @@ _Last observed: 2026-08-04_
 - HLP-013 through HLP-018 lifecycle corrections are integrated and ready for serial rollup: kernel activation, clean install membership, bridge upgrades, reset preservation, controller bootstrap, and actual-entrypoint fixture coverage. Focused Ansible validation passed on 2026-08-03 with no live host or cluster contact.
 
 - Latest platform contract now targets direct K3s `v1.36.2+k3s1` with embedded etcd `v3.6.12-k3s1`, official installer and ARM64 checksums, and immutable Cilium `v1.20.0` images compatible with Kubernetes 1.36. `./scripts/validate-ansible.sh`, `./scripts/validate.sh`, offline lifecycle fixtures, and Cilium rendering passed on 2026-08-03 without live infrastructure contact.
-- Released `homelab-0.3.2` is the sole public/private manifest renderer and the private OpenWrt command entrypoint. The public workflow delegates changed-source rendering and artifact-only commit/push behavior to the CLI while retaining validation before generated commits.
+- Released `homelab-0.4.0` is the sole public/private manifest renderer and the private OpenWrt command entrypoint. It discovers native Helm and Kustomize units recursively, rejects ambiguous or incomplete markers, mirrors source-relative artifact paths, removes stale output, and can fail after an artifact-only push.
+- The shared renderer migration passed all three CLI package tests, the complete public Ansible/manifest validator, two byte-identical public renders (`352` files; SHA-256 tree digest `d245985e0ceff210e1e700fb0fe0a58148a76417d146a1aa70a7edf6d1b10e09`), and public/private repository graph validation. GitHub pull-request validation passed twice without generated drift.
 
 ## Rollup protocol
 
@@ -37,4 +38,3 @@ Only the serial rollup owner integrates ready tasks, runs repository validation,
 
 ## Known follow-ups
 
-- Cross-repository graph validation is available via `scripts/validate-repository-graph.sh`, but was not run because it requires an explicit path to the private repository and its denylist.
