@@ -12,9 +12,9 @@
 
 ## Repository map
 
-- `argocd/infrastructure/` — kustomize source for the cluster's public desired state.
-- `artifacts/infrastructure/` — committed render output; source changes that affect it must update it.
-- `homelab argocd render` — Hermit-managed renderer for Kustomize sources; it rewrites the selected committed artifact directory.
+- `argocd/` — recursive public source tree; each render unit is native Helm (`Chart.yaml` plus `values.yaml`) or Kustomize (`kustomization.yaml`).
+- `artifacts/` — committed output mirroring source-relative paths; source changes that affect it must update it.
+- `homelab argocd render` — Hermit-managed recursive renderer; it rejects ambiguous source markers and rewrites only the selected generated output.
 - `scripts/validate.sh` — authoritative offline validation: actionlint, shellcheck, and kubeconform.
 - `ansible/` — host bootstrap and maintenance playbooks. These target real hosts when run.
 - `scripts/bootstrap.sh` — applies to a live Kubernetes cluster and reads 1Password credentials; never run without explicit user authorization.
@@ -29,9 +29,9 @@ homelab argocd render --all
 ./scripts/validate.sh
 ```
 
-Rendering uses only local tooling and writes generated files under `artifacts/`; it does not contact a cluster. Run it in the task worktree and never run it concurrently against the same worktree. CI starts from a clean checkout, renders only source directories changed by the triggering commit range, validates the result, and commits artifact changes as a distinct follow-up commit.
+Rendering uses local tools plus explicitly declared Helm/Kustomize dependencies and writes generated files under `artifacts/`; it does not contact a cluster. Run it in the task worktree and never run it concurrently against the same worktree. CI starts from a clean checkout, renders only source units changed by the triggering commit range, validates before commit-back, and rejects source-only revisions.
 
-For a focused render, use `homelab argocd render --path argocd/infrastructure/<name> --output artifacts/infrastructure/<name>`. It atomically replaces that output directory.
+For a focused render, use `homelab argocd render --path argocd/<scope>/<name> --output artifacts/<scope>/<name>`. It atomically replaces that output directory.
 
 ## Safety gates
 

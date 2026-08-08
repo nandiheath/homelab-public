@@ -1,13 +1,13 @@
 # Homelab public GitOps
 
-This repository is the public, reproducible half of a Kubernetes homelab. It declares infrastructure with Kustomize, renders the declarations into committed artifacts, and lets Argo CD reconcile that desired state in the cluster. Private applications and credential material remain outside this repository.
+This repository is the public, reproducible half of a Kubernetes homelab. It declares reusable infrastructure with native Helm or Kustomize source units, renders the declarations into committed artifacts, and lets Argo CD reconcile that desired state in the cluster. Private applications and credential material remain outside this repository.
 
 ## System model
 
 ```mermaid
 flowchart LR
-  M[argocd/infrastructure] --> R[homelab argocd render]
-  R --> A[artifacts/infrastructure]
+  M[argocd source units] --> R[homelab argocd render]
+  R --> A[matching artifacts paths]
   A --> G[Argo CD]
   G --> K[K3s cluster]
   P[private GitOps repository] --> G
@@ -21,8 +21,8 @@ The infrastructure root creates Argo CD Applications for Argo CD, Cilium, Extern
 
 | Path | Purpose |
 | --- | --- |
-| `argocd/infrastructure/` | Kustomize source for public cluster infrastructure. |
-| `artifacts/infrastructure/` | Committed, rendered Kubernetes manifests consumed by GitOps. Do not edit manually. |
+| `argocd/` | Recursive public source tree. A render unit has either `Chart.yaml` plus `values.yaml` or `kustomization.yaml`. |
+| `artifacts/` | Committed output mirroring each source unit's relative path. Do not edit manually. |
 | `Makefile` | Local wrapper for the pinned `homelab argocd render` command and repository validation. |
 | `scripts/validate.sh` | Local validation: actionlint, shellcheck, and kubeconform. |
 | `scripts/bootstrap.sh` | Legacy live-cluster bootstrap helper. It needs local credentials and mutates a cluster. |
@@ -43,7 +43,7 @@ make render
 make validate
 ```
 
-Rendering rewrites `artifacts/` locally and validation does not apply anything to a cluster. Pull-request CI delegates changed-source discovery to `homelab argocd render --ci`, validates the result, then uses `--commit-and-push` to record an artifact-only follow-up commit on the same branch.
+Rendering rewrites `artifacts/` locally and validation does not apply anything to a cluster. CI delegates changed-source discovery to `homelab argocd render --ci`, validates before commit-back, and rejects source-only revisions. Trusted branch runs commit artifact-only drift, dispatch validation for the generated commit, and then fail the original run; pull-request runs never push.
 
 ## Operations
 
