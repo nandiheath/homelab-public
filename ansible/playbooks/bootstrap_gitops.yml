@@ -327,30 +327,49 @@
               path: "{{ bootstrap_credential_files.results[1].path }}"
           no_log: true
 
+        - name: Initialize bootstrap Secret metadata
+          ansible.builtin.set_fact:
+            bootstrap_connect_secret_metadata: []
+            bootstrap_github_secret_metadata: []
+          no_log: true
+
         - name: Read Connect Secret metadata without values
           ansible.builtin.set_fact:
             bootstrap_connect_secret_metadata: >-
               {{
-                (
-                  lookup('ansible.builtin.file', bootstrap_credential_files.results[0].path)
-                  | from_yaml_all
-                  | list
-                )
-                | json_query('[].{kind: kind, name: metadata.name, namespace: metadata.namespace}')
+                bootstrap_connect_secret_metadata
+                + [{
+                  'kind': item.kind,
+                  'name': item.metadata.name,
+                  'namespace': item.metadata.namespace
+                }]
               }}
+          loop: >-
+            {{
+              lookup('ansible.builtin.file', bootstrap_credential_files.results[0].path)
+              | from_yaml_all
+              | list
+            }}
           no_log: true
 
         - name: Read GitHub App Secret metadata without values
           ansible.builtin.set_fact:
             bootstrap_github_secret_metadata: >-
               {{
-                (
-                  lookup('ansible.builtin.file', bootstrap_credential_files.results[1].path)
-                  | from_yaml_all
-                  | list
-                )
-                | json_query('[].{kind: kind, name: metadata.name, namespace: metadata.namespace, secret_type: metadata.labels."argocd.argoproj.io/secret-type"}')
+                bootstrap_github_secret_metadata
+                + [{
+                  'kind': item.kind,
+                  'name': item.metadata.name,
+                  'namespace': item.metadata.namespace,
+                  'secret_type': item.metadata.labels['argocd.argoproj.io/secret-type']
+                }]
               }}
+          loop: >-
+            {{
+              lookup('ansible.builtin.file', bootstrap_credential_files.results[1].path)
+              | from_yaml_all
+              | list
+            }}
           no_log: true
 
         - name: Require expected bootstrap Secret metadata

@@ -55,16 +55,30 @@
       delegate_facts: true
       become: false
 
-    - name: Require every non-target peer to be Ready and schedulable
+    - name: Require exact non-target membership and schedulable state
       ansible.builtin.assert:
         that:
           - hostvars['localhost'].node_maintenance_peer_nodes | map(attribute='metadata.name') | list | sort == hostvars['localhost'].node_maintenance_peer_candidates | sort
-          - hostvars['localhost'].node_maintenance_peer_nodes | json_query("[?status.conditions[?type=='Ready' && status=='True']]") | length == 2
           - hostvars['localhost'].node_maintenance_peer_nodes | selectattr('spec.unschedulable', 'defined') | selectattr('spec.unschedulable') | list | length == 0
-        fail_msg: Refusing disruption because every healthy non-target peer is not Ready and schedulable.
+        fail_msg: Refusing disruption because the non-target peers are incomplete or unschedulable.
       delegate_to: localhost
       become: false
 
+    - name: Require every non-target peer to be Ready
+      ansible.builtin.assert:
+        that:
+          - >-
+            item.status.conditions
+            | selectattr('type', 'equalto', 'Ready')
+            | selectattr('status', 'equalto', 'True')
+            | list
+            | length == 1
+        fail_msg: "Refusing disruption because peer {{ item.metadata.name }} is not Ready."
+      loop: "{{ hostvars['localhost'].node_maintenance_peer_nodes }}"
+      loop_control:
+        label: "{{ item.metadata.name }}"
+      delegate_to: localhost
+      become: false
     - name: Mark target disruptive before cordon
       ansible.builtin.set_fact:
         node_maintenance_disrupted: true

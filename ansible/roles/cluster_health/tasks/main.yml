@@ -164,9 +164,11 @@
   ansible.builtin.set_fact:
     cluster_health_pods: "{{ cluster_health_pods_command.stdout | from_json }}"
     cluster_health_nonterminal_pods: >-
-      {{ cluster_health_pods_command.stdout | from_json | json_query("items[?status.phase!='Succeeded' && status.phase!='Failed']") }}
-    cluster_health_ready_pods: >-
-      {{ cluster_health_pods_command.stdout | from_json | json_query("items[?status.phase!='Succeeded' && status.phase!='Failed' && status.conditions[?type=='Ready' && status=='True']]") }}
+      {{
+        (cluster_health_pods_command.stdout | from_json)['items']
+        | rejectattr('status.phase', 'in', ['Succeeded', 'Failed'])
+        | list
+      }}
   delegate_to: localhost
   delegate_facts: true
   become: false
@@ -175,8 +177,16 @@
 - name: Require non-terminal pods to be Ready
   ansible.builtin.assert:
     that:
-      - hostvars['localhost'].cluster_health_ready_pods | length == hostvars['localhost'].cluster_health_nonterminal_pods | length
-    fail_msg: A non-terminal pod is not Ready.
+      - >-
+        item.status.conditions
+        | selectattr('type', 'equalto', 'Ready')
+        | selectattr('status', 'equalto', 'True')
+        | list
+        | length == 1
+    fail_msg: "Pod {{ item.metadata.namespace }}/{{ item.metadata.name }} is not Ready."
+  loop: "{{ hostvars['localhost'].cluster_health_nonterminal_pods }}"
+  loop_control:
+    label: "{{ item.metadata.namespace }}/{{ item.metadata.name }}"
   delegate_to: localhost
   become: false
   run_once: true
