@@ -61,8 +61,6 @@
   ansible.builtin.set_fact:
     cluster_health_node_names: "{{ cluster_health_nodes['items'] | map(attribute='metadata.name') | list }}"
     cluster_health_node_versions: "{{ cluster_health_nodes['items'] | map(attribute='status.nodeInfo.kubeletVersion') | list }}"
-    cluster_health_ready_nodes: >-
-      {{ cluster_health_nodes | json_query("items[?status.conditions[?type=='Ready' && status=='True']].metadata.name") }}
     cluster_health_unschedulable_nodes: >-
       {{ cluster_health_nodes['items'] | selectattr('spec.unschedulable', 'defined') | selectattr('spec.unschedulable') | map(attribute='metadata.name') | list }}
   delegate_to: localhost
@@ -70,13 +68,27 @@
   become: false
   run_once: true
 
-- name: Require exact Ready node membership and permitted cordon state
+- name: Require every observed node to be Ready
+  ansible.builtin.assert:
+    that:
+      - >-
+        item.status.conditions
+        | selectattr('type', 'equalto', 'Ready')
+        | selectattr('status', 'equalto', 'True')
+        | list
+        | length == 1
+    fail_msg: "Kubernetes node {{ item.metadata.name }} is not Ready."
+  loop: "{{ cluster_health_nodes['items'] }}"
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Require exact node membership and permitted cordon state
   ansible.builtin.assert:
     that:
       - hostvars['localhost'].cluster_health_node_names | sort == cluster_health_expected_servers | sort
-      - hostvars['localhost'].cluster_health_ready_nodes | sort == cluster_health_expected_servers | sort
       - hostvars['localhost'].cluster_health_unschedulable_nodes | sort == cluster_health_expected_unschedulable | sort
-    fail_msg: Expected nodes are not exactly present and Ready, or have an unsafe cordon state.
+    fail_msg: Expected nodes are not exactly present or have an unsafe cordon state.
   delegate_to: localhost
   become: false
   run_once: true
@@ -152,9 +164,11 @@
   ansible.builtin.set_fact:
     cluster_health_pods: "{{ cluster_health_pods_command.stdout | from_json }}"
     cluster_health_nonterminal_pods: >-
-      {{ cluster_health_pods_command.stdout | from_json | json_query("items[?status.phase!='Succeeded' && status.phase!='Failed']") }}
-    cluster_health_ready_pods: >-
-      {{ cluster_health_pods_command.stdout | from_json | json_query("items[?status.phase!='Succeeded' && status.phase!='Failed' && status.conditions[?type=='Ready' && status=='True']]") }}
+      {{
+        (cluster_health_pods_command.stdout | from_json)['items']
+        | rejectattr('status.phase', 'in', ['Succeeded', 'Failed'])
+        | list
+      }}
   delegate_to: localhost
   delegate_facts: true
   become: false
@@ -163,8 +177,16 @@
 - name: Require non-terminal pods to be Ready
   ansible.builtin.assert:
     that:
-      - hostvars['localhost'].cluster_health_ready_pods | length == hostvars['localhost'].cluster_health_nonterminal_pods | length
-    fail_msg: A non-terminal pod is not Ready.
+      - >-
+        item.status.conditions
+        | selectattr('type', 'equalto', 'Ready')
+        | selectattr('status', 'equalto', 'True')
+        | list
+        | length == 1
+    fail_msg: "Pod {{ item.metadata.namespace }}/{{ item.metadata.name }} is not Ready."
+  loop: "{{ hostvars['localhost'].cluster_health_nonterminal_pods }}"
+  loop_control:
+    label: "{{ item.metadata.namespace }}/{{ item.metadata.name }}"
   delegate_to: localhost
   become: false
   run_once: true
@@ -264,7 +286,7 @@
     - (cluster_health_etcd_status_command.stdout | from_json) | length == cluster_health_expected_servers | length
   when: cluster_health_mode == 'bare_upgrade'
   delegate_to: "{{ cluster_health_etcd_host }}"
-  become: true
+  become: "{{ cluster_health_etcd_become }}"
 
 - name: Read exact embedded-etcd membership
   ansible.builtin.command:
@@ -286,7 +308,7 @@
     - (cluster_health_etcd_members_command.stdout | from_json).members | length == cluster_health_expected_servers | length
   when: cluster_health_mode == 'bare_upgrade'
   delegate_to: "{{ cluster_health_etcd_host }}"
-  become: true
+  become: "{{ cluster_health_etcd_become }}"
 
 - name: Normalize exact embedded-etcd version facts
   ansible.builtin.set_fact:

@@ -183,8 +183,35 @@
         os: "{{ groups['k3s_cluster'] | map('extract', hostvars, 'reset_preservation_baseline') | map(attribute='distribution') | list }}"
         kernels: "{{ groups['k3s_cluster'] | map('extract', hostvars, 'reset_preservation_baseline') | map(attribute='kernel') | list }}"
       kubernetes_version: "{{ reset_kubernetes_version.stdout | from_json }}"
-      nodes: "{{ reset_nodes.stdout | from_json | json_query('items[].{name: metadata.name, version: status.nodeInfo.kubeletVersion}') }}"
+      nodes: >-
+        {%- set projection = namespace(items=[]) -%}
+        {%- for item in (reset_nodes.stdout | from_json).items -%}
+          {%- set projection.items = projection.items + [{
+            'name': item.metadata.name,
+            'version': item.status.nodeInfo.kubeletVersion
+          }] -%}
+        {%- endfor -%}
+        {{ projection.items }}
       etcd_members: "{{ reset_etcd_observations }}"
       applications: >-
-        {{ reset_applications.stdout | from_json | json_query('items[].{namespace: metadata.namespace, name: metadata.name}') if reset_applications.rc == 0 else [] }}
-      persistent_volume_claims: "{{ reset_pvcs.stdout | from_json | json_query('items[].{namespace: metadata.namespace, name: metadata.name, class: spec.storageClassName, requested: spec.resources.requests.storage}') }}"
+        {%- set projection = namespace(items=[]) -%}
+        {%- if reset_applications.rc == 0 -%}
+          {%- for item in (reset_applications.stdout | from_json).items -%}
+            {%- set projection.items = projection.items + [{
+              'namespace': item.metadata.namespace,
+              'name': item.metadata.name
+            }] -%}
+          {%- endfor -%}
+        {%- endif -%}
+        {{ projection.items }}
+      persistent_volume_claims: >-
+        {%- set projection = namespace(items=[]) -%}
+        {%- for item in (reset_pvcs.stdout | from_json).items -%}
+          {%- set projection.items = projection.items + [{
+            'namespace': item.metadata.namespace,
+            'name': item.metadata.name,
+            'class': item.spec.storageClassName,
+            'requested': item.spec.resources.requests.storage
+          }] -%}
+        {%- endfor -%}
+        {{ projection.items }}

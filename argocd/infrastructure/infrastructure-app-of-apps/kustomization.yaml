@@ -3,7 +3,6 @@ kind: Kustomization
 namespace: argocd
 resources:
   - apps/argocd.yaml
-  - apps/cilium.yaml
   - apps/external-secrets.yaml
   - apps/1password-connect.yaml
   - apps/istio-base.yaml
@@ -17,12 +16,7 @@ resources:
   - apps/grafana.yaml
   - apps/cluster-namespaces.yaml
   - apps/metallb.yaml
-  - apps/homelab-private.yaml
 patches:
   - path: base-application.yaml
     target:
       kind: Application
-  - path: homelab-private-patch.yaml
-    target:
-      kind: Application
-      name: homelab-private

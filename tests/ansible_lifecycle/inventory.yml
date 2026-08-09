@@ -5,12 +5,15 @@ all:
       ansible_connection: local
   vars:
     cluster_id: fixture-cluster
+    ansible_connection: local
+    api_endpoint: 198.51.100.10
     ansible_ssh_common_args: >-
       -o StrictHostKeyChecking=yes
       -o UserKnownHostsFile={{ fixture_known_hosts_file }}
     operation_guard_known_hosts_file: "{{ fixture_known_hosts_file }}"
     k3s_install_version: v1.36.2+k3s1
     k3s_target_version: v1.36.2+k3s1
+    controller_kubectl_version: v1.35.2
     k3s_install_script_sha256: d264d4d43f7c5a27b44de0075513fb22dfb02d0b7cd33ba7a3838cb822f4729c
     cluster_cidr: 10.244.0.0/16
     service_cidr: 10.96.0.0/16

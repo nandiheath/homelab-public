@@ -19,40 +19,97 @@ command -v yq >/dev/null || { printf 'yq is required\n' >&2; exit 1; }
 
 applications() {
   local root=$1
-  find "$root/artifacts" -type f \( -name '*.yaml' -o -name '*.yml' \) -print0 | xargs -0 yq -r 'select(.kind == "Application") | [.metadata.name, .spec.source.repoURL, .spec.source.targetRevision, .spec.source.path] | @tsv'
+  {
+    find "$root/artifacts" -type f \( -name '*.yaml' -o -name '*.yml' \) -print0
+    if [[ -d "$root/bootstrap" ]]; then
+      find "$root/bootstrap" -type f \( -name '*.yaml' -o -name '*.yml' \) -print0
+    fi
+  } |
+    xargs -0 yq -r \
+      'select(.kind == "Application") | [.metadata.name, .spec.source.repoURL, .spec.source.targetRevision, .spec.source.path] | @tsv'
 }
 
 while IFS=$'\t' read -r name repo revision path; do
   [[ -n "$name" ]] || continue
   [[ "$path" != argocd/* ]] || { printf '%s reads unrendered source: %s\n' "$name" "$path" >&2; exit 1; }
   case "$name" in
-    homelab-private)
-      [[ "$repo" == 'https://github.com/nandiheath/homelab-private.git' && "$revision" == main && "$path" == artifacts/application/application-app-of-apps ]] || {
-        printf 'homelab-private source boundary is not exact\n' >&2; exit 1;
-      }
+    cilium|homelab-private|homelab-bootstrap)
+      printf 'private-owned Application %s must be absent from public artifacts\n' "$name" >&2
+      exit 1
       ;;
     *)
-      [[ "$path" == artifacts/* && -d "$public_root/$path" ]] || { printf 'public Application %s has unresolved path %s\n' "$name" "$path" >&2; exit 1; }
+      [[ "$path" == artifacts/* && -d "$public_root/$path" ]] || {
+        printf 'public Application %s has unresolved path %s\n' "$name" "$path" >&2
+        exit 1
+      }
       ;;
   esac
 done < <(applications "$public_root")
 
 while IFS=$'\t' read -r name repo revision path; do
   [[ -n "$name" ]] || continue
-  [[ "$path" == artifacts/* && "$path" != argocd/* && -d "$private_root/$path" ]] || {
-    printf 'private Application %s has unresolved path %s\n' "$name" "$path" >&2; exit 1;
-  }
+  case "$name" in
+    cilium)
+      [[ "$repo" == 'https://github.com/nandiheath/homelab-private.git' && "$revision" == main && "$path" == artifacts/infrastructure/cilium && -d "$private_root/$path" ]] || {
+        printf 'private Cilium source boundary is not exact\n' >&2
+        exit 1
+      }
+      ;;
+    homelab-private)
+      [[ "$repo" == 'https://github.com/nandiheath/homelab-private.git' && "$revision" == main && "$path" == artifacts/application/application-app-of-apps && -d "$private_root/$path" ]] || {
+        printf 'homelab-private source boundary is not exact\n' >&2
+        exit 1
+      }
+      ;;
+    homelab-bootstrap)
+      [[ "$repo" == 'https://github.com/nandiheath/homelab-private.git' && "$revision" == main && "$path" == bootstrap/resources && -d "$private_root/$path" ]] || {
+        printf 'bootstrap ownership source boundary is not exact\n' >&2
+        exit 1
+      }
+      ;;
+    *)
+      [[ "$path" == artifacts/* && "$path" != argocd/* && -d "$private_root/$path" ]] || {
+        printf 'private Application %s has unresolved path %s\n' "$name" "$path" >&2
+        exit 1
+      }
+      ;;
+  esac
 done < <(applications "$private_root")
 
 # Cilium is a deliberately shared platform artifact. Its private derivation is
 # validated separately by the private renderer against the pinned public source.
 identities() {
   local root=$1
-  find "$root/artifacts" -type f \( -name '*.yaml' -o -name '*.yml' \) ! -path "$root/artifacts/infrastructure/cilium/*" -print0 | xargs -0 yq -r '[.apiVersion, .kind, (.metadata.namespace // ""), .metadata.name] | @tsv' | sort -u
+  {
+    find "$root/artifacts" -type f \( -name '*.yaml' -o -name '*.yml' \) \
+      ! -path "$root/artifacts/infrastructure/cilium/*" -print0
+    if [[ -d "$root/bootstrap" ]]; then
+      find "$root/bootstrap" -type f \( -name '*.yaml' -o -name '*.yml' \) -print0
+    fi
+  } |
+    xargs -0 yq -r \
+      '[.apiVersion, .kind, (.metadata.namespace // ""), .metadata.name] | @tsv' |
+    sort -u
 }
 if comm -12 <(identities "$public_root") <(identities "$private_root") | grep -q .; then
   printf 'public and private rendered resource identities overlap:\n' >&2
   comm -12 <(identities "$public_root") <(identities "$private_root") >&2
+  exit 1
+fi
+
+private_project_count=$(
+  find "$private_root/bootstrap" -type f \( -name '*.yaml' -o -name '*.yml' \) -print0 |
+    xargs -0 yq -r 'select(.kind == "AppProject" and .metadata.name == "homelab-private") | .metadata.name' |
+    wc -l |
+    tr -d ' '
+)
+[[ "$private_project_count" == 1 ]] || {
+  printf 'private bootstrap must contain exactly one homelab-private AppProject\n' >&2
+  exit 1
+}
+if find "$public_root/artifacts" -type f \( -name '*.yaml' -o -name '*.yml' \) -print0 |
+  xargs -0 yq -e 'select(.kind == "AppProject" and .metadata.name == "homelab-private")' >/dev/null 2>&1; then
+  printf 'homelab-private AppProject must be absent from public artifacts\n' >&2
   exit 1
 fi
 
