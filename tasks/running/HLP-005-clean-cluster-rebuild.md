@@ -69,7 +69,7 @@ Update the operator runbook and lifecycle skill for the direct `v1.36.2+k3s1` in
 
 ## Blockers
 
-- Offline kubeconfig/bootstrap CLI integration is implemented and validated in the feature worktrees. Live GitOps remains blocked until the CLI is released and pinned and a fresh exact `BOOTSTRAP <cluster-id>` authorization is supplied.
+- Released `homelab-0.5.0` is pinned in this worktree with the offline kubeconfig/bootstrap integration validated. Live GitOps remains blocked only on a fresh exact `BOOTSTRAP <cluster-id>` authorization.
 
 ## Completion handoff
 

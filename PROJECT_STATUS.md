@@ -29,7 +29,7 @@ _Last observed: 2026-08-04_
 - HLP-013 through HLP-018 lifecycle corrections are integrated and ready for serial rollup: kernel activation, clean install membership, bridge upgrades, reset preservation, controller bootstrap, and actual-entrypoint fixture coverage. Focused Ansible validation passed on 2026-08-03 with no live host or cluster contact.
 
 - Latest platform contract now targets direct K3s `v1.36.2+k3s1` with embedded etcd `v3.6.12-k3s1`, official installer and ARM64 checksums, and immutable Cilium `v1.20.0` images compatible with Kubernetes 1.36. `./scripts/validate-ansible.sh`, `./scripts/validate.sh`, offline lifecycle fixtures, and Cilium rendering passed on 2026-08-03 without live infrastructure contact.
-- Released `homelab-0.4.0` is the sole public/private manifest renderer and the private OpenWrt command entrypoint. It discovers native Helm and Kustomize units recursively, rejects ambiguous or incomplete markers, mirrors source-relative artifact paths, removes stale output, and can fail after an artifact-only push.
+- Released `homelab-0.5.0` is the sole public/private manifest renderer, guarded cluster bootstrap CLI, and private OpenWrt command entrypoint. It adds stable or explicit direct-node kubeconfig export and guarded GitOps bootstrap while retaining recursive native Helm/Kustomize rendering and the reviewed router operations.
 - The shared renderer migration passed all three CLI package tests, the complete public Ansible/manifest validator, two byte-identical public renders (`352` files; SHA-256 tree digest `d245985e0ceff210e1e700fb0fe0a58148a76417d146a1aa70a7edf6d1b10e09`), and public/private repository graph validation. GitHub pull-request validation passed twice without generated drift.
 
 ## Rollup protocol

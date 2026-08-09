@@ -28,7 +28,7 @@ Deliver the fail-closed three-server K3s rebuild lifecycle, its numbered operato
 
 ## Blockers
 
-- Offline kubeconfig/bootstrap CLI integration is active. Live GitOps bootstrap still requires a fresh exact authorization after the CLI is released and pinned.
+- Released `homelab-0.5.0` is pinned with offline kubeconfig/bootstrap integration active. Live GitOps bootstrap still requires a fresh exact authorization.
 
 ## Completion handoff
 

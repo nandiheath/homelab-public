@@ -15,8 +15,8 @@ for tool in "${required_tools[@]}"; do
   fi
 done
 
-if [[ "$(homelab version)" != "0.4.0" ]]; then
-  printf 'Error: homelab 0.4.0 is required by the shared render contract.\n' >&2
+if [[ "$(homelab version)" != "0.5.0" ]]; then
+  printf 'Error: homelab 0.5.0 is required by the shared render and lifecycle contract.\n' >&2
   exit 1
 fi
 
