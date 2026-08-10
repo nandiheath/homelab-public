@@ -10,10 +10,10 @@ reconcile the complete public and private desired state. This step resolves the
 temporary plaintext Hubble boundary from step 6.
 
 > **Stop before live execution:** the 2026-08-09 bootstrap failed because Argo
-> CD was ambient-enrolled before `istiod` and `ztunnel` existed. The reviewed
-> source fix must be published at the revision used by the public root before
-> running the repaired script; otherwise `cluster-namespaces` can restore the
-> unsafe label. Script review is not live-recovery authorization.
+> CD was ambient-enrolled before `istiod` and `ztunnel` existed. Publish the
+> reviewed namespace and script fix at the revision used by the public root
+> before running the repaired script; otherwise GitOps can restore the unsafe
+> label.
 
 ## Procedure
 
@@ -37,42 +37,47 @@ temporary plaintext Hubble boundary from step 6.
      --private-repository="$PRIVATE_REPOSITORY"
    ```
 
-5. Obtain fresh exact authorization:
-
-   ```text
-   BOOTSTRAP <cluster-id>
-   ```
-
-6. Run the repository script from the controller:
+5. Run the repository script from the controller:
 
    ```bash
    ./scripts/bootstrap.sh \
      --kubeconfig="$CONTROLLER_KUBECONFIG" \
      --kubectl="$CONTROLLER_KUBECTL" \
-     --private-repository="$PRIVATE_REPOSITORY" \
-     --cluster-id="$CLUSTER_ID" \
-     --authorize="BOOTSTRAP ${CLUSTER_ID}"
+     --private-repository="$PRIVATE_REPOSITORY"
    ```
 
-7. The script creates only unlabeled bootstrap namespaces first and removes any
+   Add `--force-conflicts` only when intentionally transferring server-side
+   apply field ownership to the bootstrap transaction. The flag is forwarded
+   to every bootstrap `kubectl apply --server-side` call.
+6. The script creates only unlabeled bootstrap namespaces first and removes any
    stale ambient labels from `argocd` and `istio-system`. It then applies and
    verifies, in order, Istio base, `istiod`, Istio CNI, and ztunnel. Only after
    ztunnel is rolled out does it apply and restart Argo CD.
-8. The script applies cert-manager, External Secrets, 1Password Connect, the
-   public root, private Cilium, the private root, and the private ownership root
-   in dependency order. A failed prior 1Password health probe is replaced only
-   after Connect is available.
-9. Before success, every expected child Application—not only the app-of-apps
-   root—must be Synced and Healthy. Cilium and Cilium Envoy must roll out,
-   `hubble-disable-tls` must be `"false"`, the Hubble Certificate must be Ready,
-   and both control-plane namespaces must remain outside ambient mode.
-10. If any check fails, preserve the exact evidence and stop. Do not manually
-    patch the live ConfigMap or re-add ambient labels as a substitute for GitOps
-    ownership.
+7. The script applies the private AppProject and seeds exactly two root
+   Applications: public `core-infrastructure-aoa` and private `private-aoa`.
+   It waits only for both Application objects to exist, removes the superseded
+   root identities if present, and returns control to Argo CD. Child
+   Applications, Cilium TLS restoration, storage, workloads, and smoke tests
+   are GitOps reconciliation and step 8 acceptance, not bootstrap work.
+8. If any bootstrap check fails, preserve the exact evidence and stop. Do not
+   manually patch live workloads or re-add ambient labels as a substitute for
+   GitOps ownership.
 
 ## Expected boundary
 
 Istio is operational before Argo CD starts; Argo CD and Istio remain independent
-of ambient redirection; GitOps owns the full desired state; Cilium is self-healed
-to TLS-enabled Hubble; and no credential value appeared in a process argument.
-Application storage, smoke tests, and final residue checks remain for step 8.
+of ambient redirection; `core-infrastructure-aoa` and `private-aoa` exist; and
+Argo CD owns all subsequent reconciliation. Bootstrap does not wait for child
+Application health.
+
+To remove only the manifests installed directly by bootstrap, in reverse order:
+
+```bash
+./scripts/prune.sh --reset \
+  --kubeconfig="$CONTROLLER_KUBECONFIG" \
+  --kubectl="$CONTROLLER_KUBECTL" \
+  --private-repository="$PRIVATE_REPOSITORY"
+```
+
+`--reset` is mandatory. The prune transaction removes Application finalizers
+before deleting the roots so it does not cascade into GitOps-managed workloads.

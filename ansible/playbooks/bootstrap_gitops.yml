@@ -14,18 +14,12 @@
     bootstrap_etcd_become: "{{ etcd_become | default(true) }}"
     public_artifacts_root: "{{ playbook_dir }}/../../artifacts/infrastructure"
     bootstrap_private_project: "{{ bootstrap_private_root }}/resources/appproject-homelab-private.yaml"
-    bootstrap_private_cilium: "{{ bootstrap_private_root }}/resources/application-cilium.yaml"
-    bootstrap_private_application: "{{ bootstrap_private_root }}/resources/application-homelab-private.yaml"
-    bootstrap_private_ownership_root: "{{ bootstrap_private_root }}/application-homelab-bootstrap.yaml"
+    bootstrap_private_application: "{{ bootstrap_private_root }}/resources/application-private-aoa.yaml"
     bootstrap_private_manifests:
       - id: project
         path: "{{ bootstrap_private_project }}"
-      - id: cilium
-        path: "{{ bootstrap_private_cilium }}"
       - id: private
         path: "{{ bootstrap_private_application }}"
-      - id: bootstrap
-        path: "{{ bootstrap_private_ownership_root }}"
     bootstrap_namespace_files:
       - "{{ public_artifacts_root }}/cluster-namespaces/namespace_argocd.yml"
       - "{{ public_artifacts_root }}/cluster-namespaces/namespace_external-secrets.yml"
@@ -34,7 +28,7 @@
       - "{{ public_artifacts_root }}/argocd"
       - "{{ public_artifacts_root }}/external-secrets"
       - "{{ public_artifacts_root }}/1password-connect"
-    bootstrap_public_root: "{{ public_artifacts_root }}/bootstrap/application_infrastructure-app-of-apps.yml"
+    bootstrap_public_root: "{{ public_artifacts_root }}/bootstrap/application_core-infrastructure-aoa.yml"
     bootstrap_expected_nodes: "{{ groups['server'] | map('extract', hostvars, 'k3s_node_name') | list }}"
     bootstrap_direct_endpoint: "{{ hostvars[groups['server'][0]].ansible_host | default(groups['server'][0], true) }}"
   pre_tasks:
@@ -84,13 +78,13 @@
     - name: Require exact private bootstrap manifest set
       ansible.builtin.assert:
         that:
-          - bootstrap_private_manifest_inventory.matched == 4
+          - bootstrap_private_manifest_inventory.matched == 2
           - >-
             bootstrap_private_manifest_inventory.files
             | map(attribute='path')
             | sort
             == bootstrap_private_manifests | map(attribute='path') | sort
-        fail_msg: Private bootstrap root must contain exactly the four approved manifests.
+        fail_msg: Private bootstrap root must contain exactly the two approved manifests.
 
     - name: Inspect required bootstrap files
       ansible.builtin.stat:
@@ -180,41 +174,21 @@
           - bootstrap_private_documents.project[0].spec.destinations[0].server == 'https://kubernetes.default.svc'
         fail_msg: Private bootstrap AppProject does not match the reviewed contract.
 
-    - name: Require exact private bootstrap Applications
+    - name: Require exact private bootstrap Application
       ansible.builtin.assert:
         that:
-          - bootstrap_private_documents.cilium[0].kind == 'Application'
-          - bootstrap_private_documents.cilium[0].metadata.name == 'cilium'
-          - bootstrap_private_documents.cilium[0].metadata.namespace == 'argocd'
-          - bootstrap_private_documents.cilium[0].spec.project == 'homelab-private'
-          - bootstrap_private_documents.cilium[0].spec.source.repoURL == 'https://github.com/nandiheath/homelab-private.git'
-          - bootstrap_private_documents.cilium[0].spec.source.targetRevision == 'main'
-          - bootstrap_private_documents.cilium[0].spec.source.path == 'artifacts/infrastructure/cilium'
           - bootstrap_private_documents.private[0].kind == 'Application'
-          - bootstrap_private_documents.private[0].metadata.name == 'homelab-private'
+          - bootstrap_private_documents.private[0].metadata.name == 'private-aoa'
           - bootstrap_private_documents.private[0].metadata.namespace == 'argocd'
           - bootstrap_private_documents.private[0].spec.project == 'homelab-private'
           - bootstrap_private_documents.private[0].spec.source.repoURL == 'https://github.com/nandiheath/homelab-private.git'
           - bootstrap_private_documents.private[0].spec.source.targetRevision == 'main'
-          - bootstrap_private_documents.private[0].spec.source.path == 'artifacts/application/application-app-of-apps'
-          - bootstrap_private_documents.bootstrap[0].kind == 'Application'
-          - bootstrap_private_documents.bootstrap[0].metadata.name == 'homelab-bootstrap'
-          - bootstrap_private_documents.bootstrap[0].metadata.namespace == 'argocd'
-          - bootstrap_private_documents.bootstrap[0].spec.project == 'homelab-private'
-          - bootstrap_private_documents.bootstrap[0].spec.source.repoURL == 'https://github.com/nandiheath/homelab-private.git'
-          - bootstrap_private_documents.bootstrap[0].spec.source.targetRevision == 'main'
-          - bootstrap_private_documents.bootstrap[0].spec.source.path == 'bootstrap/resources'
-          - bootstrap_private_documents.cilium[0].spec.syncPolicy.automated.prune | bool
-          - bootstrap_private_documents.cilium[0].spec.syncPolicy.automated.selfHeal | bool
+          - bootstrap_private_documents.private[0].spec.source.path == 'artifacts/application/private-aoa'
           - bootstrap_private_documents.private[0].spec.syncPolicy.automated.prune | bool
           - bootstrap_private_documents.private[0].spec.syncPolicy.automated.selfHeal | bool
-          - bootstrap_private_documents.bootstrap[0].spec.syncPolicy.automated.prune | bool
-          - bootstrap_private_documents.bootstrap[0].spec.syncPolicy.automated.selfHeal | bool
-          - "'ServerSideApply=true' in bootstrap_private_documents.cilium[0].spec.syncPolicy.syncOptions"
           - "'ServerSideApply=true' in bootstrap_private_documents.private[0].spec.syncPolicy.syncOptions"
-          - "'ServerSideApply=true' in bootstrap_private_documents.bootstrap[0].spec.syncPolicy.syncOptions"
           - (api_endpoint | string) not in (bootstrap_private_documents | to_json)
-        fail_msg: Private bootstrap Applications do not match the reviewed source, path, revision, destination, or sync contract.
+        fail_msg: Private bootstrap Application does not match the reviewed source, path, revision, destination, or sync contract.
 
     - name: Read public GitOps root manifest
       ansible.builtin.slurp:
@@ -230,9 +204,9 @@
         that:
           - bootstrap_public_root_documents | length == 1
           - bootstrap_public_root_documents[0].kind == 'Application'
-          - bootstrap_public_root_documents[0].metadata.name == 'infrastructure-app-of-apps'
+          - bootstrap_public_root_documents[0].metadata.name == 'core-infrastructure-aoa'
           - bootstrap_public_root_documents[0].metadata.namespace == 'argocd'
-          - bootstrap_public_root_documents[0].spec.source.path == 'artifacts/infrastructure/infrastructure-app-of-apps'
+          - bootstrap_public_root_documents[0].spec.source.path == 'artifacts/infrastructure/core-infrastructure-aoa'
         fail_msg: Public GitOps root does not match the reviewed bootstrap contract.
   roles:
     - role: operation_guard
@@ -471,117 +445,11 @@
             argv: ["{{ bootstrap_kubectl }}", --kubeconfig, "{{ bootstrap_kubeconfig }}", apply, -f, "{{ bootstrap_public_root }}"]
           changed_when: true
 
-        - name: Wait for public GitOps root creation
-          ansible.builtin.command:
-            argv: ["{{ bootstrap_kubectl }}", --kubeconfig, "{{ bootstrap_kubeconfig }}", -n, argocd, wait, --for=create, application/infrastructure-app-of-apps, --timeout=10m]
-          changed_when: false
-
-        - name: Wait for public GitOps root health
-          ansible.builtin.command:
-            argv: ["{{ bootstrap_kubectl }}", --kubeconfig, "{{ bootstrap_kubeconfig }}", -n, argocd, wait, '--for=jsonpath={.status.health.status}=Healthy', application/infrastructure-app-of-apps, --timeout=20m]
-          changed_when: false
-
-        - name: Wait for public GitOps root synchronization
-          ansible.builtin.command:
-            argv: ["{{ bootstrap_kubectl }}", --kubeconfig, "{{ bootstrap_kubeconfig }}", -n, argocd, wait, '--for=jsonpath={.status.sync.status}=Synced', application/infrastructure-app-of-apps, --timeout=20m]
-          changed_when: false
-
-        - name: Apply private Cilium Application
-          ansible.builtin.command:
-            argv: ["{{ bootstrap_kubectl }}", --kubeconfig, "{{ bootstrap_kubeconfig }}", apply, -f, "{{ bootstrap_private_cilium }}"]
-          changed_when: true
-
-        - name: Wait for Cilium Application health
-          ansible.builtin.command:
-            argv: ["{{ bootstrap_kubectl }}", --kubeconfig, "{{ bootstrap_kubeconfig }}", -n, argocd, wait, '--for=jsonpath={.status.health.status}=Healthy', application/cilium, --timeout=20m]
-          changed_when: false
-
-        - name: Wait for Cilium Application synchronization
-          ansible.builtin.command:
-            argv: ["{{ bootstrap_kubectl }}", --kubeconfig, "{{ bootstrap_kubeconfig }}", -n, argocd, wait, '--for=jsonpath={.status.sync.status}=Synced', application/cilium, --timeout=20m]
-          changed_when: false
-
-        - name: Wait for Cilium DaemonSet rollout
-          ansible.builtin.command:
-            argv: ["{{ bootstrap_kubectl }}", --kubeconfig, "{{ bootstrap_kubeconfig }}", -n, kube-system, rollout, status, daemonset/cilium, --timeout=20m]
-          changed_when: false
-
-        - name: Read reconciled Cilium configuration
-          ansible.builtin.command:
-            argv: ["{{ bootstrap_kubectl }}", --kubeconfig, "{{ bootstrap_kubeconfig }}", -n, kube-system, get, configmap, cilium-config, --output=json]
-          register: bootstrap_cilium_config
-          changed_when: false
-
-        - name: Require final Hubble TLS configuration
-          ansible.builtin.assert:
-            that:
-              - (bootstrap_cilium_config.stdout | from_json).data['hubble-disable-tls'] == 'false'
-            fail_msg: GitOps did not restore the final Hubble TLS configuration.
-
-        - name: Require Hubble server Certificate
-          ansible.builtin.command:
-            argv: ["{{ bootstrap_kubectl }}", --kubeconfig, "{{ bootstrap_kubeconfig }}", -n, kube-system, get, certificates.cert-manager.io, hubble-server-certs, --output=name]
-          changed_when: false
 
         - name: Apply private GitOps root
           ansible.builtin.command:
             argv: ["{{ bootstrap_kubectl }}", --kubeconfig, "{{ bootstrap_kubeconfig }}", apply, -f, "{{ bootstrap_private_application }}"]
           changed_when: true
-
-        - name: Wait for private GitOps root health
-          ansible.builtin.command:
-            argv: ["{{ bootstrap_kubectl }}", --kubeconfig, "{{ bootstrap_kubeconfig }}", -n, argocd, wait, '--for=jsonpath={.status.health.status}=Healthy', application/homelab-private, --timeout=20m]
-          changed_when: false
-
-        - name: Wait for private GitOps root synchronization
-          ansible.builtin.command:
-            argv: ["{{ bootstrap_kubectl }}", --kubeconfig, "{{ bootstrap_kubeconfig }}", -n, argocd, wait, '--for=jsonpath={.status.sync.status}=Synced', application/homelab-private, --timeout=20m]
-          changed_when: false
-
-        - name: Apply private bootstrap ownership root
-          ansible.builtin.command:
-            argv: ["{{ bootstrap_kubectl }}", --kubeconfig, "{{ bootstrap_kubeconfig }}", apply, -f, "{{ bootstrap_private_ownership_root }}"]
-          changed_when: true
-
-        - name: Wait for bootstrap ownership root health
-          ansible.builtin.command:
-            argv: ["{{ bootstrap_kubectl }}", --kubeconfig, "{{ bootstrap_kubeconfig }}", -n, argocd, wait, '--for=jsonpath={.status.health.status}=Healthy', application/homelab-bootstrap, --timeout=20m]
-          changed_when: false
-
-        - name: Wait for bootstrap ownership root synchronization
-          ansible.builtin.command:
-            argv: ["{{ bootstrap_kubectl }}", --kubeconfig, "{{ bootstrap_kubeconfig }}", -n, argocd, wait, '--for=jsonpath={.status.sync.status}=Synced', application/homelab-bootstrap, --timeout=20m]
-          changed_when: false
-
-        - name: Read bootstrap ownership resources
-          ansible.builtin.command:
-            argv: ["{{ bootstrap_kubectl }}", --kubeconfig, "{{ bootstrap_kubeconfig }}", -n, argocd, get, application, homelab-bootstrap, --output=json]
-          register: bootstrap_ownership_application
-          changed_when: false
-
-        - name: Require exact bootstrap ownership handoff
-          ansible.builtin.assert:
-            that:
-              - (bootstrap_ownership_application.stdout | from_json).status.resources | length == 3
-              - >-
-                (bootstrap_ownership_application.stdout | from_json).status.resources
-                | selectattr('kind', 'equalto', 'AppProject')
-                | selectattr('name', 'equalto', 'homelab-private')
-                | list
-                | length == 1
-              - >-
-                (bootstrap_ownership_application.stdout | from_json).status.resources
-                | selectattr('kind', 'equalto', 'Application')
-                | selectattr('name', 'equalto', 'cilium')
-                | list
-                | length == 1
-              - >-
-                (bootstrap_ownership_application.stdout | from_json).status.resources
-                | selectattr('kind', 'equalto', 'Application')
-                | selectattr('name', 'equalto', 'homelab-private')
-                | list
-                | length == 1
-            fail_msg: Bootstrap ownership root does not manage exactly the seeded private resources.
       always:
         - name: Remove temporary credential manifests
           ansible.builtin.file:

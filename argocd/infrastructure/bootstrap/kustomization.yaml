@@ -4,6 +4,6 @@ kind: Kustomization
 resources:
   - clustersecretstore.yaml
   - externalsecret-argocd.yaml
-  - application.yaml
+  - application-core-infrastructure-aoa.yaml
   - projects
   - clusterissuer.yaml

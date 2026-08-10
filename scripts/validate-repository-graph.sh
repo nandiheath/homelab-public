@@ -33,7 +33,7 @@ while IFS=$'\t' read -r name repo revision path; do
   [[ -n "$name" ]] || continue
   [[ "$path" != argocd/* ]] || { printf '%s reads unrendered source: %s\n' "$name" "$path" >&2; exit 1; }
   case "$name" in
-    cilium|homelab-private|homelab-bootstrap)
+    cilium|private-aoa)
       printf 'private-owned Application %s must be absent from public artifacts\n' "$name" >&2
       exit 1
       ;;
@@ -55,15 +55,9 @@ while IFS=$'\t' read -r name repo revision path; do
         exit 1
       }
       ;;
-    homelab-private)
-      [[ "$repo" == 'https://github.com/nandiheath/homelab-private.git' && "$revision" == main && "$path" == artifacts/application/application-app-of-apps && -d "$private_root/$path" ]] || {
-        printf 'homelab-private source boundary is not exact\n' >&2
-        exit 1
-      }
-      ;;
-    homelab-bootstrap)
-      [[ "$repo" == 'https://github.com/nandiheath/homelab-private.git' && "$revision" == main && "$path" == bootstrap/resources && -d "$private_root/$path" ]] || {
-        printf 'bootstrap ownership source boundary is not exact\n' >&2
+    private-aoa)
+      [[ "$repo" == 'https://github.com/nandiheath/homelab-private.git' && "$revision" == main && "$path" == artifacts/application/private-aoa && -d "$private_root/$path" ]] || {
+        printf 'private-aoa source boundary is not exact\n' >&2
         exit 1
       }
       ;;

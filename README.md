@@ -25,7 +25,8 @@ The infrastructure root creates Argo CD Applications for Argo CD, Cilium, Extern
 | `artifacts/` | Committed output mirroring each source unit's relative path. Do not edit manually. |
 | `Makefile` | Local wrapper for the pinned `homelab argocd render` command and repository validation. |
 | `scripts/validate.sh` | Local validation: actionlint, shellcheck, and kubeconform. |
-| `scripts/bootstrap.sh` | Legacy live-cluster bootstrap helper. It needs local credentials and mutates a cluster. |
+| `scripts/bootstrap.sh` | Install Istio and Argo CD, then seed the public and private app-of-apps roots. |
+| `scripts/prune.sh` | Remove direct bootstrap manifests in reverse order; requires `--reset`. |
 | `ansible/` | K3s node provisioning, upgrades, recovery, and GitOps bootstrap playbooks. |
 | `docs/bootstrap/` | Numbered agent guide for initial host bootstrap, destructive rebuild, final acceptance, and guarded upgrades. |
 | `docs/operations-runbook.md` | Guard-railed operating procedures and explicit operational placeholders. |
