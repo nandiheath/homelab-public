@@ -21,7 +21,7 @@ if [[ "$(homelab version)" != "0.5.0" ]]; then
 fi
 
 actionlint
-shellcheck -x scripts/*.sh
+shellcheck -x scripts/*.sh tests/bootstrap/*.sh
 kubeconform \
   -strict \
   -summary \

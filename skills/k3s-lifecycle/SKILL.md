@@ -7,6 +7,12 @@ description: Safely operate guarded K3s reset, Raspberry Pi kernel activation, d
 
 Read `docs/operations-runbook.md`, `PROJECT_STATUS.md`, the private production inventory, and the active task before any operation.
 
+> **Live stop condition (observed 2026-08-09):** GitOps bootstrap is incomplete.
+> The repaired script and non-ambient control-plane namespace source must be
+> reviewed and published at the revision used by the public root before a
+> separately authorized recovery. Never rerun the old revision or infer live
+> authorization from source review.
+
 ## Invariants
 
 - Require current-session authorization and the complete exact literal for every mutating entrypoint.
@@ -20,9 +26,9 @@ Read `docs/operations-runbook.md`, `PROJECT_STATUS.md`, the private production i
 - Before Cilium exists, map every server's required `k3s_node_name` to the exact Kubernetes node set and require each sole Ready condition to be `Ready=False`, reason `KubeletNotReady`, with `NetworkPluginNotReady` in its message. Reject Ready nodes because they can hide a third-party CNI; never add a temporary or default CNI. Reject conflicting packaged resources or an observable Pod/Service CIDR mismatch before apply.
 
 - Treat reset, kernel activation, clean install, private Cilium bootstrap, and GitOps bootstrap as separate phases. Supply a fresh exact confirmation for each; no confirmation carries forward.
-- Use released `homelab kubeconfig` and `homelab bootstrap` as the only operator entrypoints for controller kubeconfig export and GitOps bootstrap. Do not invoke their Ansible playbooks directly.
+- Use released `homelab kubeconfig` for controller kubeconfig export and the reviewed repository `scripts/bootstrap.sh` for GitOps bootstrap. Do not invoke the underlying Ansible playbook directly.
 - `homelab kubeconfig` defaults to the inventory's certificate-valid stable API endpoint and accepts `--direct-node` only for pre-VIP bootstrap or recovery. It must never silently fall back from stable mode.
-- Pass credential manifest content only through the approved `CONNECT_CREDENTIALS_CONTENT` and `GITHUB_APP_CREDENTIALS_CONTENT` environment boundary; pass only the exact authorization literal in arguments.
+- If the required Connect Secrets are absent, keep credential input only in the ignored `credentials/1password/` paths consumed by the script. Never pass credential values in process arguments.
 
 ## Required sequence
 
@@ -32,7 +38,7 @@ Read `docs/operations-runbook.md`, `PROJECT_STATUS.md`, the private production i
 4. Activate only `5.15.0-1105-raspi`, serially, while K3s is absent.
 5. Install `v1.36.2+k3s1` and form exactly three voting etcd `v3.6.12-k3s1` members.
 6. Bootstrap private Cilium v1.20.0 from the controller without cert-manager or GitOps; require no Applications or PVCs.
-7. Run released `homelab bootstrap` from the controller. Require its full bare-cluster preflight, dependency-ordered public/private apply, Cilium TLS restoration, private-root health, ownership handoff, and credential cleanup before final acceptance.
+7. Run the reviewed `scripts/bootstrap.sh` from the controller. Require Istio base, `istiod`, Istio CNI, and ztunnel before Argo CD; keep `argocd` and `istio-system` outside ambient mode; then require dependency-ordered public/private apply, Cilium TLS restoration, every child Application, and private-root health before final acceptance.
 
 ## Dependency-free Cilium bootstrap
 
