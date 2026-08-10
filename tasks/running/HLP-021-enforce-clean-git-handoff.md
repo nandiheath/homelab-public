@@ -1,6 +1,6 @@
 # HLP-021 — Enforce clean Git handoff
 
-- Status: running
+- Status: ready-for-rollup
 - Owner: Main
 - Milestone: HLP-M005
 - Depends on: none
@@ -44,5 +44,5 @@ Require every public-repository session handoff to leave a clean, pushed branch 
 - Summary: Added the shared offline clean-tree/published-branch gate to the mandatory contribution workflow and aligned public task and milestone handoffs with pull-request delivery evidence.
 - Files changed: `skills/contribution-workflow/SKILL.md`, `tasks/README.md`, both task templates, and this task/milestone contract.
 - Observed verification: the lifecycle validator passed. After installing the pinned local `ansible.posix` collection, `make validate` passed Ansible lint/syntax, lifecycle fixtures, entrypoint fixtures, and manifest validation with 349 resources, 245 valid, 0 invalid, 0 errors, and 104 schema-skipped; no infrastructure or credentials were contacted.
-- Delivery: `docs/hlp-021-git-handoff` review branch; pull-request URL will replace this branch reference after publication.
+- Delivery: https://github.com/nandiheath/homelab-public/pull/15
 - Follow-ups: Merge the review branch, then let the serial rollup owner check off HLP-021 and remove HLP-M005/HLP-021 after milestone-level verification.
