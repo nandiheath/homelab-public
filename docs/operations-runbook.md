@@ -202,25 +202,44 @@ The uniquely named probe Pod is deleted in `always` and its absence is asserted.
 
 ## Bootstrap GitOps
 
+> **Stop before live execution:** the 2026-08-09 bootstrap failed because Argo
+> CD was ambient-enrolled before `istiod` and `ztunnel` existed. Publish the
+> reviewed namespace and script fix at the revision used by the public root
+> before running recovery. A reviewed local diff is not live authorization.
+
 Authorization must be exactly:
 
 ```text
 BOOTSTRAP <cluster-id>
 ```
 
-Resolve required credential-manifest content through the approved 1Password environment boundary without printing it, then run only the released CLI from the controller:
+Inspect the credential-free plan, then run the repository script from the
+controller:
 
 ```bash
-op run -- homelab bootstrap \
-  --inventory="$INVENTORY" \
-  --public-repository="$PUBLIC_REPOSITORY" \
-  --private-repository="$PRIVATE_REPOSITORY" \
+./scripts/bootstrap.sh --dry-run \
+  --private-repository="$PRIVATE_REPOSITORY"
+
+./scripts/bootstrap.sh \
   --kubeconfig="$CONTROLLER_KUBECONFIG" \
   --kubectl="$CONTROLLER_KUBECTL" \
+  --private-repository="$PRIVATE_REPOSITORY" \
+  --cluster-id="$CLUSTER_ID" \
   --authorize="BOOTSTRAP ${CLUSTER_ID}"
 ```
 
-The CLI delegates to the guarded lifecycle; do not invoke the playbook as an operator entrypoint. It runs kubectl only on the controller, creates mode-`0600` temporary credential files immediately before no-log apply, and deletes them in `always`. Ordering is namespaces; Argo CD, External Secrets, and 1Password Connect; temporary credentials; the private AppProject; the public root; private Cilium; the private root; then the bootstrap ownership root. GitOps bootstrap never installs or changes K3s. Reconciliation must install cert-manager, make the Cilium Application Synced and Healthy, roll out the Cilium DaemonSet, restore `hubble-disable-tls: "false"`, and create the omitted Hubble Certificate.
+If the Connect Secrets are absent, provide the token and credentials JSON only
+through the ignored `credentials/1password/` files documented in step 7. The
+script does not place secret values in process arguments and reuses existing
+Secrets during recovery.
+
+The script keeps `argocd` and `istio-system` outside ambient mode, then applies
+and verifies Istio base, `istiod`, Istio CNI, and ztunnel before applying or
+restarting Argo CD. It next installs cert-manager, External Secrets, and
+1Password Connect; applies the public and private roots; waits for every
+expected child Application; restores Hubble TLS through the private Cilium
+Application; and rejects any final ambient re-enrollment of either control-plane
+namespace. GitOps bootstrap never installs or changes K3s.
 
 ## Acceptance
 

@@ -3,4 +3,4 @@ kind: Namespace
 metadata:
   name: argocd
   labels:
-    istio.io/dataplane-mode: ambient
+    app.kubernetes.io/part-of: argocd

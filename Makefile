@@ -1,7 +1,7 @@
 PATH := $(CURDIR)/bin:$(PATH)
 HOMELAB ?= ./bin/homelab
 
-.PHONY: render validate validate-ansible validate-manifests
+.PHONY: render validate validate-ansible validate-bootstrap validate-manifests
 
 render:
 	@if [ -n "$(SOURCE)" ]; then \
@@ -11,10 +11,13 @@ render:
 		$(HOMELAB) argocd render --all; \
 	fi
 
-validate: validate-ansible validate-manifests
+validate: validate-ansible validate-bootstrap validate-manifests
 
 validate-ansible:
 	./scripts/validate-ansible.sh
+
+validate-bootstrap:
+	./tests/bootstrap/run.sh
 
 validate-manifests:
 	./scripts/validate.sh
