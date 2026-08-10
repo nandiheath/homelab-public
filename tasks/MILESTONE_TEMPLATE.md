@@ -29,4 +29,5 @@ Describe one coherent milestone outcome.
 - Tasks rolled up:
 - Observed milestone verification:
 - Project status updated:
+- Delivery:
 - Follow-ups:

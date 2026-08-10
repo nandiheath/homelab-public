@@ -34,4 +34,5 @@ Describe one observable behavior.
 - Summary:
 - Files changed:
 - Observed verification:
+- Delivery:
 - Follow-ups:

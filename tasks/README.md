@@ -22,8 +22,8 @@ A child task is claimable only when every dependency has been rolled up and its 
 
 ## Completion and verification
 
-Implementation agents run focused proof, record criterion-level evidence in their task handoff, and set `ready-for-rollup`. The serial rollup owner integrates child tasks one at a time and checks them off in the milestone.
+Implementation agents run focused proof, record criterion-level evidence in their task handoff, commit only owned changes, push the exact commit, and record the pull-request URL in `Delivery`. Blocked work uses a draft pull request; a dirty working tree is never a handoff. The serial rollup owner integrates child tasks one at a time and checks them off in the milestone.
 
-A milestone becomes `ready-for-rollup` only when every child task is rolled up and checked, no planned/running child still references it, every milestone acceptance criterion is observed, and the milestone's own verification passes. The rollup owner records the observed milestone evidence, runs `./scripts/validate.sh`, updates `PROJECT_STATUS.md`, and removes the completed milestone.
+A milestone becomes `ready-for-rollup` only when every child task is rolled up and checked, no planned/running child still references it, every milestone acceptance criterion is observed, the milestone's own verification passes, and delivery evidence is recorded. The rollup owner runs `./scripts/validate.sh`, updates `PROJECT_STATUS.md`, and removes the completed milestone.
 
-Validate lifecycle structure locally with `agent-workspace repo-tasks validate --root .` when the global CLI is available.
+Validate lifecycle structure locally with `agent-workspace repo-tasks validate --root .`. After publishing a review branch, validate the Git boundary with `agent-workspace repo-handoff validate --root . --pr <URL>`.
