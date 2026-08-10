@@ -1,7 +1,7 @@
 # HLP-020 - Add Argo GHCR chart credentials
 
-- Status: planned
-- Owner: unassigned
+- Status: running
+- Owner: Main
 - Milestone: HLP-M004
 - Depends on: none
 
@@ -34,8 +34,7 @@ Reuse the existing `externalsecret-argocd.yaml` and `ClusterSecretStore/onepassw
 
 ## Blockers
 
-- None observed. The private allowlist is tracked by HL-016 because public repository validation forbids private AppProjects in public artifacts.
-- HLP-005 currently owns the entire `argocd/infrastructure/bootstrap/` and `artifacts/infrastructure/bootstrap/` paths. Per repository ownership rules, this task remains unclaimed until HLP-005 rolls up and releases those paths.
+None observed. HLP-005 released the exact bootstrap source and artifact paths when its offline repair landed; its separately authorized live acceptance remains independent.
 
 ## Completion handoff
 

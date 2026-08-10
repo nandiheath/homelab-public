@@ -32,9 +32,7 @@
 - `ansible/playbooks/bootstrap_gitops.yml`
 - `ansible/roles/k3s_server/tasks/export_kubeconfig.yml`
 - `ansible/roles/k3s_server/tasks/resolve_kubeconfig_endpoint.yml`
-- `argocd/infrastructure/bootstrap/`
 - `argocd/infrastructure/infrastructure-app-of-apps/`
-- `artifacts/infrastructure/bootstrap/`
 - `artifacts/infrastructure/infrastructure-app-of-apps/`
 - `scripts/bootstrap.sh`
 - `scripts/validate-repository-graph.sh`
