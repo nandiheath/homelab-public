@@ -1,7 +1,7 @@
 # HLP-M004 - Private GHCR Helm registry access
 
-- Status: planned
-- Owner: unassigned
+- Status: running
+- Owner: Main
 
 ## Goal
 
