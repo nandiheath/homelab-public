@@ -1,6 +1,6 @@
 # Project status
 
-_Last observed: 2026-08-04_
+_Last observed: 2026-08-09_
 
 ## Current state
 
@@ -9,6 +9,7 @@ _Last observed: 2026-08-04_
 - HLP-005 remains active and blocked at its separately authorized final GitOps acceptance boundary.
 - HLP-M002 remains a future backup/disaster-recovery planning reminder; it carries no implementation claim and is not evidence of deployed backup infrastructure.
 - Planning is milestone-first: every child task references a parent, and milestone completion requires child rollup plus milestone-level verification.
+- Argo CD bootstrap desired state includes a separate ExternalSecret-backed repository credential for authenticated read-only OCI Helm access to `ghcr.io/nandiheath/homelab-services-charts`. It resolves only `username` and `token` from the existing 1Password ClusterSecretStore, emits no resolved credential or image pull secret, and is paired with an exact private AppProject source allowlist.
 
 ## Observed validation
 
@@ -31,6 +32,7 @@ _Last observed: 2026-08-04_
 - Latest platform contract now targets direct K3s `v1.36.2+k3s1` with embedded etcd `v3.6.12-k3s1`, official installer and ARM64 checksums, and immutable Cilium `v1.20.0` images compatible with Kubernetes 1.36. `./scripts/validate-ansible.sh`, `./scripts/validate.sh`, offline lifecycle fixtures, and Cilium rendering passed on 2026-08-03 without live infrastructure contact.
 - Released `homelab-0.5.0` is the sole public/private manifest renderer, guarded cluster bootstrap CLI, and private OpenWrt command entrypoint. It adds stable or explicit direct-node kubeconfig export and guarded GitOps bootstrap while retaining recursive native Helm/Kustomize rendering and the reviewed router operations.
 - The shared renderer migration passed all three CLI package tests, the complete public Ansible/manifest validator, two byte-identical public renders (`352` files; SHA-256 tree digest `d245985e0ceff210e1e700fb0fe0a58148a76417d146a1aa70a7edf6d1b10e09`), and public/private repository graph validation. GitHub pull-request validation passed twice without generated drift.
+- HLP-M004 completed on 2026-08-09. A focused bootstrap render and `./scripts/validate.sh` reported 350 resources, 245 valid, 0 invalid, 0 errors, and 105 schema-skipped; repository task validation passed. Source/artifact inspection confirmed `type: helm`, the exact GHCR URL, `enableOCI: "true"`, repository-secret labeling, unresolved username/password templates, and the exact `ghcr-chart-read-credentials` remote refs. The public artifact contains no private AppProject, GHCR wildcard, image pull secret, or resolved credential; private revision `fbb2fe825393b1254a0ab19add210dd66b2e5d25` contains only the private GitOps repository and exact chart repository in its AppProject allowlist. No bootstrap, apply, cluster, Argo CD, secret-resolution, registry-mutation, or deployment command ran.
 
 ## Rollup protocol
 
