@@ -1,6 +1,6 @@
 # HLP-020 - Add Argo GHCR chart credentials
 
-- Status: running
+- Status: ready-for-rollup
 - Owner: Main
 - Milestone: HLP-M004
 - Depends on: none
@@ -38,7 +38,7 @@ None observed. HLP-005 released the exact bootstrap source and artifact paths wh
 
 ## Completion handoff
 
-- Summary:
-- Files changed:
-- Observed verification:
-- Follow-ups:
+- Summary: Added a separate ExternalSecret-backed Argo repository Secret for authenticated OCI Helm reads from `ghcr.io/nandiheath/homelab-services-charts`, using only the existing 1Password ClusterSecretStore and the `username`/`token` fields of `ghcr-chart-read-credentials`.
+- Files changed: `argocd/infrastructure/bootstrap/externalsecret-ghcr-charts.yaml`; `argocd/infrastructure/bootstrap/kustomization.yaml`; `artifacts/infrastructure/bootstrap/externalsecret_ghcr-homelab-services-charts.yml`; HLP-005 ownership metadata; and this task handoff.
+- Observed verification: The focused bootstrap render completed; `./scripts/validate.sh` reported 350 resources, 245 valid, 0 invalid, 0 errors, and 105 schema-skipped; repository task validation passed. Source/artifact inspection confirmed the repository label, `type: helm`, exact URL, OCI enablement, unresolved username/password templates, and exact 1Password remote refs. Public artifacts contain no private AppProject, GHCR wildcard, imagePullSecret, or resolved credential. Private HL-016 landed at `fbb2fe825393b1254a0ab19add210dd66b2e5d25` with exactly the private GitOps repository and the enrolled GHCR chart repository in `spec.sourceRepos`. No bootstrap, apply, cluster, Argo CD, secret-resolution, registry-mutation, or deployment command ran.
+- Follow-ups: The serial rollup owner must complete HLP-M004 milestone verification, update `PROJECT_STATUS.md`, and remove the successful contracts.
