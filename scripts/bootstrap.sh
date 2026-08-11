@@ -71,11 +71,13 @@ while [ "$#" -gt 0 ]; do
       private_repository=$2
       shift 2
       ;;
+
     --timeout)
       [ "$#" -ge 2 ] || fail "$1 requires a value"
       timeout=$2
       shift 2
       ;;
+
     -h | --help)
       usage
       exit 0
@@ -125,6 +127,7 @@ if "$dry_run"; then
   exit 0
 fi
 
+
 require_file "$kubeconfig"
 
 if [[ "$kubectl" == */* ]]; then
@@ -168,7 +171,6 @@ resource_exists() {
   local resource=$2
   kube -n "$namespace" get "$resource" >/dev/null 2>&1
 }
-
 ensure_namespace() {
   local name=$1
   local part_of=$2

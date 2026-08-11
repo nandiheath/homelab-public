@@ -206,7 +206,6 @@ The uniquely named probe Pod is deleted in `always` and its absence is asserted.
 > CD was ambient-enrolled before `istiod` and `ztunnel` existed. Publish the
 > reviewed namespace and script fix at the revision used by the public root
 > before running recovery.
-
 Inspect the credential-free plan, then run the repository script from the
 controller:
 
@@ -224,7 +223,6 @@ Use `--force-conflicts` only for an intentional server-side apply ownership
 transfer. It is passed to every bootstrap apply. Bootstrap has no authorization
 argument; the operator-visible kubeconfig and context preflight remain its
 live-target guard.
-
 If the Connect Secrets are absent, provide the token and credentials JSON only
 through the ignored `credentials/1password/` files documented in step 7. The
 script does not place secret values in process arguments and reuses existing
