@@ -202,10 +202,19 @@ The uniquely named probe Pod is deleted in `always` and its absence is asserted.
 
 ## Bootstrap GitOps
 
-> **Stop before live execution:** the 2026-08-09 bootstrap failed because Argo
-> CD was ambient-enrolled before `istiod` and `ztunnel` existed. Publish the
-> reviewed namespace and script fix at the revision used by the public root
-> before running recovery.
+> **Publication gate:** both root Applications track `main`. Merge the reviewed
+> public and private changes and prove their rendered root paths exist on
+> `origin/main` before live execution. A local feature branch is insufficient,
+> and `--force-conflicts` cannot publish a revision or repair a missing Git path.
+>
+> ```bash
+> git fetch origin main
+> git -C "$PRIVATE_REPOSITORY" fetch origin main
+> git cat-file -e \
+>   origin/main:artifacts/infrastructure/core-infrastructure-aoa/application_argocd.yml
+> git -C "$PRIVATE_REPOSITORY" cat-file -e \
+>   origin/main:artifacts/application/private-aoa/application_cilium.yml
+> ```
 Inspect the credential-free plan, then run the repository script from the
 controller:
 
@@ -220,19 +229,33 @@ controller:
 ```
 
 Use `--force-conflicts` only for an intentional server-side apply ownership
-transfer. It is passed to every bootstrap apply. Bootstrap has no authorization
-argument; the operator-visible kubeconfig and context preflight remain its
-live-target guard.
-If the Connect Secrets are absent, provide the token and credentials JSON only
-through the ignored `credentials/1password/` files documented in step 7. The
-script does not place secret values in process arguments and reuses existing
-Secrets during recovery.
+transfer. It is passed to every bootstrap apply; it does not bypass the
+publication gate. Bootstrap has no authorization argument; the operator-visible
+kubeconfig and context preflight remain its live-target guard.
+
+Recovery requires the existing `Secret/1password/op-credentials` and
+`Secret/external-secrets/onepassword-connect-token`. Check their names without
+reading their data. If either is absent, stop: this script does not create those
+Secrets or read ignored credential files.
 
 The script keeps `argocd` and `istio-system` outside ambient mode, applies and
 verifies Istio base, `istiod`, Istio CNI, and ztunnel, then applies or restarts
 Argo CD. It seeds `core-infrastructure-aoa` and `private-aoa`, waits for both
 Application objects to exist, and stops. Argo CD performs every child
 Application reconciliation and all workload convergence.
+
+After Argo CD reconciles the roots, reject `Unknown` sync or
+`ComparisonError` even if the retained health field says `Healthy`:
+
+```bash
+"$CONTROLLER_KUBECTL" --kubeconfig "$CONTROLLER_KUBECONFIG" \
+  -n argocd get application core-infrastructure-aoa private-aoa \
+  -o custom-columns=NAME:.metadata.name,SYNC:.status.sync.status,HEALTH:.status.health.status,CONDITIONS:.status.conditions[*].type
+```
+
+Successful script output proves only the staged bootstrap boundary. It does not
+prove that the two Git roots can load `main` or that child reconciliation has
+completed.
 
 Use `./scripts/prune.sh --reset` with the same kubeconfig, kubectl, and private
 repository arguments to remove direct bootstrap manifests in reverse order.

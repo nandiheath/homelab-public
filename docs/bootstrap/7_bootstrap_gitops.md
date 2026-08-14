@@ -1,6 +1,6 @@
 # 7. Bootstrap GitOps
 
-**Applies to:** initial bootstrap, destructive rebuild, or recovery of an absent GitOps control plane. **Not a routine K3s-upgrade step.**
+**Applies to:** recovery or bootstrap after the required 1Password Connect Secrets have been seeded. The repository script does not seed those credentials. **Not a routine K3s-upgrade step.**
 
 ## Overview
 
@@ -9,11 +9,11 @@ Bootstrap the complete Istio ambient data plane before Argo CD, keep the
 reconcile the complete public and private desired state. This step resolves the
 temporary plaintext Hubble boundary from step 6.
 
-> **Stop before live execution:** the 2026-08-09 bootstrap failed because Argo
-> CD was ambient-enrolled before `istiod` and `ztunnel` existed. Publish the
-> reviewed namespace and script fix at the revision used by the public root
-> before running the repaired script; otherwise GitOps can restore the unsafe
-> label.
+> **Publication gate:** both root Applications track `main`. The reviewed public
+> and private changes must be merged into `main`, and the root source paths must
+> exist there, before live execution. A local feature branch is not sufficient.
+> `--force-conflicts` transfers server-side apply field ownership only; it does
+> not publish Git revisions or make a missing Argo CD source path available.
 
 ## Procedure
 
@@ -22,14 +22,24 @@ temporary plaintext Hubble boundary from step 6.
    recovery of the documented partial bootstrap, preserve the observed
    resources and use the same staged script; do not reset or manually patch
    workloads.
-2. Confirm both repositories are on the reviewed revisions used to render the
-   public and private artifacts. Re-run public validation, private
-   validation/rendering, and the cross-repository graph check.
-3. If the two 1Password Connect Secrets do not already exist, place the Connect
-   token and credentials JSON only in the ignored
-   `credentials/1password/1password-token.txt` and
-   `credentials/1password/1password-credentials.json` paths. The script reuses
-   existing Secrets and never passes their values in process arguments.
+2. Confirm both reviewed changes are merged into `main`, fetch both remotes, and
+   prove representative files exist at the exact revisions the roots will use:
+
+   ```bash
+   git fetch origin main
+   git -C "$PRIVATE_REPOSITORY" fetch origin main
+   git cat-file -e \
+     origin/main:artifacts/infrastructure/core-infrastructure-aoa/application_argocd.yml
+   git -C "$PRIVATE_REPOSITORY" cat-file -e \
+     origin/main:artifacts/application/private-aoa/application_cilium.yml
+   ```
+
+   All four commands must succeed. Re-run public validation, private
+   validation/rendering, and the cross-repository graph check afterward.
+3. Require the existing `Secret/1password/op-credentials` and
+   `Secret/external-secrets/onepassword-connect-token` by name without reading
+   their data. If either is absent, stop: `scripts/bootstrap.sh` does not create
+   those Secrets or read files under `credentials/1password/`.
 4. Inspect the credential-free local plan:
 
    ```bash
@@ -48,7 +58,8 @@ temporary plaintext Hubble boundary from step 6.
 
    Add `--force-conflicts` only when intentionally transferring server-side
    apply field ownership to the bootstrap transaction. The flag is forwarded
-   to every bootstrap `kubectl apply --server-side` call.
+   to every bootstrap `kubectl apply --server-side` call. It is not a recovery
+   mechanism for an unpublished root revision or missing Git path.
 6. The script creates only unlabeled bootstrap namespaces first and removes any
    stale ambient labels from `argocd` and `istio-system`. It then applies and
    verifies, in order, Istio base, `istiod`, Istio CNI, and ztunnel. Only after
@@ -67,8 +78,9 @@ temporary plaintext Hubble boundary from step 6.
 
 Istio is operational before Argo CD starts; Argo CD and Istio remain independent
 of ambient redirection; `core-infrastructure-aoa` and `private-aoa` exist; and
-Argo CD owns all subsequent reconciliation. Bootstrap does not wait for child
-Application health.
+both roots can load their published `main` source paths. Bootstrap does not wait
+for child Application health. Successful script output is therefore only the
+bootstrap boundary, not final acceptance; continue immediately with step 8.
 
 To remove only the manifests installed directly by bootstrap, in reverse order:
 
