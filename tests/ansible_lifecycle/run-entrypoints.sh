@@ -162,7 +162,7 @@ assert_tasks 'reset transaction' 'Uninstall the role-owned K3s installation' ans
 assert_tasks 'network transaction' 'Apply temporary Cilium bootstrap artifact from controller' ansible/playbooks/bootstrap_network.yaml "${network_args[@]}"
 assert_tasks 'GitOps transaction' 'Apply GitOps controllers from controller' ansible/playbooks/bootstrap_gitops.yml "${gitops_args[@]}"
 
-mutation_phase_pattern='^(namespaces|controllers|credentials|project|public-root|cilium|private-root|ownership-root)\|'
+mutation_phase_pattern='^(namespaces|controllers|credentials|project|public-root|private-root)\|'
 gitops_authorization=(-e '{"operation_guard_confirmation":"BOOTSTRAP fixture-cluster"}')
 
 assert_credentials_removed() {
@@ -203,9 +203,7 @@ expected_phases=(
   credentials
   project
   public-root
-  cilium
   private-root
-  ownership-root
 )
 previous_line=0
 for phase in "${expected_phases[@]}"; do
@@ -239,13 +237,7 @@ for acceptance_read in \
   'deployment/argocd-server' \
   'deployment/external-secrets' \
   'deployment/onepassword-connect' \
-  'secret/argocd-github-app' \
-  'rollout status daemonset/cilium' \
-  'get configmap cilium-config --output=json' \
-  'get certificates.cert-manager.io hubble-server-certs --output=name' \
-  'application/cilium' \
-  'application/homelab-private' \
-  'get application homelab-bootstrap --output=json'; do
+  'secret/argocd-github-app'; do
   if ! grep -Fq -- "$acceptance_read" "$FIXTURE_COMMAND_LOG"; then
     printf 'GitOps acceptance read is missing: %s\n' "$acceptance_read" >&2
     exit 1

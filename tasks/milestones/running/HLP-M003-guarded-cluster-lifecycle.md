@@ -28,7 +28,7 @@ Deliver the fail-closed three-server K3s rebuild lifecycle, its numbered operato
 
 ## Blockers
 
-- Released `homelab-0.5.0` is pinned with offline kubeconfig/bootstrap integration active. Live GitOps bootstrap still requires a fresh exact authorization.
+- GitOps recovery remains blocked until the renamed roots and staged bootstrap changes are reviewed and published. The revised repository bootstrap accepts no authorization flag; no live recovery has run.
 
 ## Completion handoff
 

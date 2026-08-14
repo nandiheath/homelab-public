@@ -5,6 +5,6 @@ resources:
   - clustersecretstore.yaml
   - externalsecret-argocd.yaml
   - externalsecret-ghcr-charts.yaml
-  - application.yaml
+  - application-core-infrastructure-aoa.yaml
   - projects
   - clusterissuer.yaml

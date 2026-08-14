@@ -1,7 +1,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: infrastructure-app-of-apps
+  name: core-infrastructure-aoa
   # You'll usually want to add your resources to the argocd namespace.
   namespace: argocd
   # Add this finalizer ONLY if you want these to cascade delete.
@@ -18,7 +18,7 @@ spec:
   source:
     repoURL: $ARGOCD_GITHUB_REPO
     targetRevision: main
-    path: artifacts/infrastructure/infrastructure-app-of-apps
+    path: artifacts/infrastructure/core-infrastructure-aoa
 
     # directory
     directory:

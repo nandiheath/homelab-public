@@ -9,10 +9,8 @@ case "$args" in
   *" apply -f "*/artifacts/infrastructure/external-secrets*) phase=controllers ;;
   *" apply -f "*/artifacts/infrastructure/1password-connect*) phase=controllers ;;
   *" apply -f "*appproject-homelab-private.yaml*) phase=project ;;
-  *" apply -f "*application_infrastructure-app-of-apps.yml*) phase=public-root ;;
-  *" apply -f "*application-cilium.yaml*) phase=cilium ;;
-  *" apply -f "*application-homelab-private.yaml*) phase=private-root ;;
-  *" apply -f "*application-homelab-bootstrap.yaml*) phase=ownership-root ;;
+  *" apply -f "*application_core-infrastructure-aoa.yml*) phase=public-root ;;
+  *" apply -f "*application-private-aoa.yaml*) phase=private-root ;;
   *" apply -f "*) phase=credentials ;;
 esac
 printf '%s|%s\n' "$phase" "$args" >>"${FIXTURE_COMMAND_LOG:?}"
@@ -57,8 +55,8 @@ case "$args" in
   *" get certificates.cert-manager.io hubble-server-certs --output=name")
     printf '%s\n' 'certificate.cert-manager.io/hubble-server-certs'
     ;;
-  *" get application homelab-bootstrap --output=json")
-    printf '%s\n' '{"status":{"resources":[{"kind":"AppProject","name":"homelab-private"},{"kind":"Application","name":"cilium"},{"kind":"Application","name":"homelab-private"}]}}'
+  *" get application private-aoa --output=json")
+    printf '%s\n' '{"status":{"resources":[]}}'
     ;;
   *)
     ;;

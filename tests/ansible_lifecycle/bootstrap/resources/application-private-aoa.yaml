@@ -1,14 +1,14 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: cilium
+  name: private-aoa
   namespace: argocd
 spec:
   project: homelab-private
   source:
     repoURL: https://github.com/nandiheath/homelab-private.git
     targetRevision: main
-    path: artifacts/infrastructure/cilium
+    path: artifacts/application/private-aoa
   destination:
     server: https://kubernetes.default.svc
   syncPolicy:

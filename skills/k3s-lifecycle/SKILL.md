@@ -7,15 +7,15 @@ description: Safely operate guarded K3s reset, Raspberry Pi kernel activation, d
 
 Read `docs/operations-runbook.md`, `PROJECT_STATUS.md`, the private production inventory, and the active task before any operation.
 
-> **Live stop condition (observed 2026-08-09):** GitOps bootstrap is incomplete.
-> The repaired script and non-ambient control-plane namespace source must be
-> reviewed and published at the revision used by the public root before a
-> separately authorized recovery. Never rerun the old revision or infer live
-> authorization from source review.
+> **Live stop condition (observed 2026-08-14):** the staged script was run while
+> the public and private root changes were still unmerged. Istio, Argo CD, and
+> Hubble TLS are healthy, but both root Applications report `ComparisonError`
+> because their `main` source paths do not exist. Do not rerun bootstrap. Merge
+> both reviewed changes in the documented order, then verify Argo reconciliation.
 
 ## Invariants
 
-- Require current-session authorization and the complete exact literal for every mutating entrypoint.
+- Require current-session authorization and the complete exact literal for destructive host lifecycle entrypoints. GitOps bootstrap instead requires an explicit kubeconfig, validates its mode and current context, and accepts no authorization argument.
 - Require independently verified SSH host-key pins. Never use `ssh-keyscan`, trust-on-first-use, `accept-new`, `StrictHostKeyChecking=no`, or `/dev/null` known-hosts as trust evidence.
 - This rebuild intentionally destroys Kubernetes, embedded-etcd, Longhorn, CNPG, PVC, and application data. Do not create or require a snapshot, backup, token export, recovery bundle, signer, or restore proof.
 - Preserve Ubuntu, SSH configuration and keys, hostname, users, networking, `/boot/firmware`, and the retained prior kernel.
@@ -25,10 +25,10 @@ Read `docs/operations-runbook.md`, `PROJECT_STATUS.md`, the private production i
 - Install every server with the declared network values and with Flannel, kube-proxy, the K3s network-policy controller, packaged Traefik, and ServiceLB disabled. Cilium alone owns CNI, cluster-pool IPAM, policy, and kube-proxy replacement.
 - Before Cilium exists, map every server's required `k3s_node_name` to the exact Kubernetes node set and require each sole Ready condition to be `Ready=False`, reason `KubeletNotReady`, with `NetworkPluginNotReady` in its message. Reject Ready nodes because they can hide a third-party CNI; never add a temporary or default CNI. Reject conflicting packaged resources or an observable Pod/Service CIDR mismatch before apply.
 
-- Treat reset, kernel activation, clean install, private Cilium bootstrap, and GitOps bootstrap as separate phases. Supply a fresh exact confirmation for each; no confirmation carries forward.
+- Treat reset, kernel activation, clean install, private Cilium bootstrap, and GitOps bootstrap as separate phases. Fresh exact confirmation is mandatory for guarded host and cluster lifecycle phases; no confirmation carries forward or is accepted by the GitOps bootstrap script.
 - Use released `homelab kubeconfig` for controller kubeconfig export and the reviewed repository `scripts/bootstrap.sh` for GitOps bootstrap. Do not invoke the underlying Ansible playbook directly.
 - `homelab kubeconfig` defaults to the inventory's certificate-valid stable API endpoint and accepts `--direct-node` only for pre-VIP bootstrap or recovery. It must never silently fall back from stable mode.
-- If the required Connect Secrets are absent, keep credential input only in the ignored `credentials/1password/` paths consumed by the script. Never pass credential values in process arguments.
+- GitOps recovery requires the existing Connect credential Secrets. The repository script neither creates them nor reads ignored credential files; stop if either Secret is absent.
 
 ## Required sequence
 
@@ -38,7 +38,7 @@ Read `docs/operations-runbook.md`, `PROJECT_STATUS.md`, the private production i
 4. Activate only `5.15.0-1105-raspi`, serially, while K3s is absent.
 5. Install `v1.36.2+k3s1` and form exactly three voting etcd `v3.6.12-k3s1` members.
 6. Bootstrap private Cilium v1.20.0 from the controller without cert-manager or GitOps; require no Applications or PVCs.
-7. Run the reviewed `scripts/bootstrap.sh` from the controller. Require Istio base, `istiod`, Istio CNI, and ztunnel before Argo CD; keep `argocd` and `istio-system` outside ambient mode; then require dependency-ordered public/private apply, Cilium TLS restoration, every child Application, and private-root health before final acceptance.
+7. Only after both root paths exist on `origin/main`, run the reviewed `scripts/bootstrap.sh` from the controller. Require Istio base, `istiod`, Istio CNI, and ztunnel before Argo CD; keep `argocd` and `istio-system` outside ambient mode; seed only `core-infrastructure-aoa` and `private-aoa`; then return control to Argo CD for child reconciliation and final acceptance.
 
 ## Dependency-free Cilium bootstrap
 
