@@ -32,9 +32,7 @@
 - `ansible/playbooks/bootstrap_gitops.yml`
 - `ansible/roles/k3s_server/tasks/export_kubeconfig.yml`
 - `ansible/roles/k3s_server/tasks/resolve_kubeconfig_endpoint.yml`
-- `argocd/infrastructure/bootstrap/`
 - `argocd/infrastructure/core-infrastructure-aoa/`
-- `artifacts/infrastructure/bootstrap/`
 - `artifacts/infrastructure/core-infrastructure-aoa/`
 - `scripts/bootstrap.sh`
 - `scripts/prune.sh`
@@ -72,6 +70,7 @@ Update the operator runbook and lifecycle skill for the direct `v1.36.2+k3s1` in
 ## Blockers
 
 - The staged Istio-before-Argo recovery ran while both replacement root paths were still unpublished. The infrastructure boundary is healthy, but both roots remain `Unknown` with `ComparisonError`; final GitOps, storage, workload, ingress, and credential-residue acceptance is incomplete. Merge the reviewed public change before the private change, verify both paths on `origin/main`, and allow Argo CD to reconcile. Do not rerun bootstrap for this publication failure.
+- `argocd/infrastructure/bootstrap/` and `artifacts/infrastructure/bootstrap/` are temporarily yielded to HLP-021 for the reviewed GHCR chart credential source cutover. Do not run final HLP-005 acceptance until HLP-M005 rolls up and returns those paths.
 
 ## Completion handoff
 
