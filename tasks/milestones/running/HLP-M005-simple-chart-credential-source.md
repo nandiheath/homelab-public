@@ -1,7 +1,7 @@
 # HLP-M005 — Simple chart credential source
 
-- Status: planned
-- Owner: unassigned
+- Status: running
+- Owner: Main
 
 ## Goal
 

@@ -1,14 +1,14 @@
 # HLP-021 — Update chart credential source
 
-- Status: planned
-- Owner: unassigned
+- Status: ready-for-rollup
+- Owner: Main
 - Milestone: HLP-M005
 - Depends on: none
 
 ## Owned paths
 
-- `argocd/infrastructure/bootstrap/externalsecret_ghcr-homelab-services-charts.yaml`
-- `artifacts/infrastructure/bootstrap/externalsecret_ghcr-homelab-services-charts.yaml`
+- `argocd/infrastructure/bootstrap/externalsecret-ghcr-charts.yaml`
+- `artifacts/infrastructure/bootstrap/externalsecret_ghcr-homelab-services-charts.yml`
 - `PROJECT_STATUS.md`
 - `tasks/planned/HLP-021-update-chart-credential-source.md`
 - `tasks/running/HLP-021-update-chart-credential-source.md`
@@ -43,7 +43,7 @@ Change only the Argo OCI credential URL from the repository-prefixed chart packa
 
 ## Completion handoff
 
-- Summary:
-- Files changed:
-- Observed verification:
-- Follow-ups:
+- Summary: Changed only the ExternalSecret-backed Argo OCI repository URL to the concise `ghcr.io/nandiheath/charts` prefix and regenerated the bootstrap artifact.
+- Files changed: `argocd/infrastructure/bootstrap/externalsecret-ghcr-charts.yaml`; `artifacts/infrastructure/bootstrap/externalsecret_ghcr-homelab-services-charts.yml`; `PROJECT_STATUS.md`; this task and its running milestone contract.
+- Observed verification: Focused bootstrap rendering completed; `./scripts/validate.sh` reported 350 resources, 245 valid, 0 invalid, 0 errors, and 105 skipped; repository task validation and `git diff --check` passed; exact diff inspection showed only the URL changed in source and artifact; no legacy package prefix remains in `argocd/`, `artifacts/`, or `PROJECT_STATUS.md`.
+- Follow-ups: Serially roll up HLP-021/HLP-M005 after review, restore the temporarily yielded HLP-005 bootstrap ownership, and do not apply or resolve the credential as part of this task.
