@@ -11,3 +11,4 @@ spec:
       name: istio-validator-istio-system
       jsonPointers:
         - /webhooks/0/clientConfig/caBundle
+        - /webhooks/0/failurePolicy

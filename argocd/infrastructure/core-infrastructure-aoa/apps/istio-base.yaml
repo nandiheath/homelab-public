@@ -11,3 +11,4 @@ spec:
       name: istiod-default-validator
       jsonPointers:
         - /webhooks/0/clientConfig/caBundle
+        - /webhooks/0/failurePolicy
