@@ -1,7 +1,8 @@
 # https://github.com/istio/istio/blob/1.19.1/manifests/charts/gateway/values.yaml
 service:
-  # Changin to ClusterIP as we don't need an external LB to front ingress gateway, we use cloudflared
-  type: ClusterIP
+  # Keep the Cloudflare Tunnel's cluster-local path while also exposing one
+  # stable private-LAN address through MetalLB.
+  type: LoadBalancer
   ports:
     - name: status-port
       port: 15021
@@ -15,8 +16,9 @@ service:
       port: 443
       protocol: TCP
       targetPort: 443
-  annotations: {}
-  loadBalancerIP: ""
+  annotations:
+    metallb.io/address-pool: homelab-lb
+  loadBalancerIP: 10.43.10.100
   loadBalancerSourceRanges: []
   externalTrafficPolicy: ""
   externalIPs: []
