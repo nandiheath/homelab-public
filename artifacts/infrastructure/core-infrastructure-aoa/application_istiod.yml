@@ -18,6 +18,12 @@ spec:
     path: artifacts/infrastructure/istiod
     repoURL: https://github.com/nandiheath/homelab-public.git
     targetRevision: main
+  ignoreDifferences:
+    - group: admissionregistration.k8s.io
+      kind: ValidatingWebhookConfiguration
+      name: istio-validator-istio-system
+      jsonPointers:
+        - /webhooks/0/clientConfig/caBundle
   syncPolicy:
     automated:
       prune: true

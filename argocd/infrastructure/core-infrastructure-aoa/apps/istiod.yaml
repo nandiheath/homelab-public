@@ -5,3 +5,9 @@ metadata:
 spec:
   source:
     path: artifacts/infrastructure/istiod
+  ignoreDifferences:
+    - group: admissionregistration.k8s.io
+      kind: ValidatingWebhookConfiguration
+      name: istio-validator-istio-system
+      jsonPointers:
+        - /webhooks/0/clientConfig/caBundle
