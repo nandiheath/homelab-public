@@ -18,6 +18,12 @@ spec:
     path: artifacts/infrastructure/metallb
     repoURL: https://github.com/nandiheath/homelab-public.git
     targetRevision: main
+  ignoreDifferences:
+    - group: apiextensions.k8s.io
+      kind: CustomResourceDefinition
+      name: bgppeers.metallb.io
+      jsonPointers:
+        - /spec/conversion/webhook/clientConfig/caBundle
   syncPolicy:
     automated:
       prune: true
