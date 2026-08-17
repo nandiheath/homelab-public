@@ -1,6 +1,6 @@
 # HLP-024 — Update Argo CD root URL
 
-- Status: ready-for-rollup
+- Status: running
 - Owner: Main
 - Milestone: HLP-M006
 - Depends on: none
@@ -23,9 +23,9 @@ Serve Argo CD from the root of its dedicated public hostname and advertise that 
 
 ## Acceptance criteria
 
-- [x] The Argo CD ConfigMap advertises the dedicated root URL.
-- [x] The command-parameters ConfigMap uses default root serving with no legacy subpath.
-- [x] Source and committed artifact render without drift.
+- [ ] The Argo CD ConfigMap advertises the dedicated root URL.
+- [ ] The command-parameters ConfigMap uses default root serving with no legacy subpath.
+- [ ] Source and committed artifact render without drift.
 
 ## Verification
 
@@ -38,8 +38,8 @@ Serve Argo CD from the root of its dedicated public hostname and advertise that 
 
 ## Completion handoff
 
-- Summary: Moved Argo CD from the shared-host subpath to the dedicated hostname root and regenerated all checksum-dependent artifacts.
-- Files changed: `argocd/infrastructure/argocd/values.yaml`, `artifacts/infrastructure/argocd/`.
-- Observed verification: Focused rendering completed without error. `./scripts/validate.sh` reported 351 resources, 246 valid, 0 invalid, 0 errors, and 105 schema-skipped. Pull-request checks passed. Live Argo CD reconciliation reached `Synced` and `Healthy`; `argocd-cm` advertises the dedicated root URL, `server.basehref` is `/`, `server.rootpath` is empty, and `deployment/argocd-server` rolled out successfully.
-- Delivery: https://github.com/nandiheath/homelab-public/pull/28 merged as `353064f2e16d4e3ffc36248b0eea162bdf96557b`.
-- Follow-ups: Complete private edge-route acceptance and nested-hostname TLS verification under HL-M010.
+- Summary:
+- Files changed:
+- Observed verification:
+- Delivery:
+- Follow-ups:

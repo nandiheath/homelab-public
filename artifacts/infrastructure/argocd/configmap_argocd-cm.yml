@@ -117,7 +117,7 @@ data:
   statusbadge.enabled: "false"
   timeout.hard.reconciliation: 0s
   timeout.reconciliation: 180s
-  url: https://argocd.homelab.nandi.sh
+  url: https://argocd-homelab.nandi.sh
 kind: ConfigMap
 metadata:
   labels:

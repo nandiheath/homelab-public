@@ -17,7 +17,7 @@ configs:
     
 
   cm:
-    url: https://argocd.homelab.nandi.sh
+    url: https://argocd-homelab.nandi.sh
     
     # Enable server-side diff for Argo CD
     controller.diff.server.side: "true"
