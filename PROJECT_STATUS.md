@@ -1,6 +1,6 @@
 # Project status
 
-_Last observed: 2026-08-09_
+_Last observed: 2026-08-17_
 
 ## Current state
 
@@ -10,6 +10,7 @@ _Last observed: 2026-08-09_
 - HLP-M002 remains a future backup/disaster-recovery planning reminder; it carries no implementation claim and is not evidence of deployed backup infrastructure.
 - Planning is milestone-first: every child task references a parent, and milestone completion requires child rollup plus milestone-level verification.
 - Argo CD bootstrap desired state includes a separate ExternalSecret-backed repository credential for authenticated read-only OCI Helm access to `ghcr.io/nandiheath/charts`. It resolves only `username` and `token` from the existing 1Password ClusterSecretStore, emits no resolved credential or image pull secret, and is paired with an exact private AppProject source allowlist.
+- The Istio ingress gateway is a healthy `LoadBalancer` at the reviewed MetalLB address and pool. Ports `15021`, `80`, and `443`, selector identity, and the existing cluster-local Cloudflare Tunnel origin path are preserved.
 
 ## Observed validation
 
@@ -34,6 +35,8 @@ _Last observed: 2026-08-09_
 - The shared renderer migration passed all three CLI package tests, the complete public Ansible/manifest validator, two byte-identical public renders (`352` files; SHA-256 tree digest `d245985e0ceff210e1e700fb0fe0a58148a76417d146a1aa70a7edf6d1b10e09`), and public/private repository graph validation. GitHub pull-request validation passed twice without generated drift.
 - HLP-M004 completed on 2026-08-09. A focused bootstrap render and `./scripts/validate.sh` reported 350 resources, 245 valid, 0 invalid, 0 errors, and 105 schema-skipped; repository task validation passed. Source/artifact inspection confirmed `type: helm`, the exact GHCR URL, `enableOCI: "true"`, repository-secret labeling, unresolved username/password templates, and the exact `ghcr-chart-read-credentials` remote refs. The public artifact contains no private AppProject, GHCR wildcard, image pull secret, or resolved credential; private revision `fbb2fe825393b1254a0ab19add210dd66b2e5d25` contains only the private GitOps repository and exact chart repository in its AppProject allowlist. No bootstrap, apply, cluster, Argo CD, secret-resolution, registry-mutation, or deployment command ran.
 - HLP-M005 completed on 2026-08-09. Source and committed artifact use `ghcr.io/nandiheath/charts`, retain `type: helm`, `enableOCI: "true"`, repository-secret labeling, unresolved username/password templates, and the exact `ghcr-chart-read-credentials` remote references. A focused bootstrap render and `./scripts/validate.sh` reported 350 resources, 245 valid, 0 invalid, 0 errors, and 105 schema-skipped; repository task validation and exact boundary inspection passed. The legacy package prefix is absent from current public desired state and status. No private AppProject, wildcard source, image pull secret, resolved credential, bootstrap, cluster, Argo CD, secret-resolution, registry mutation, or deployment operation was added or run. Bootstrap source and artifact ownership returned to blocked HLP-005.
+
+- HLP-M006 completed on 2026-08-17. Focused render, full public validation, and pull-request CI passed. Live inspection confirmed the requested LoadBalancer address, one Ready gateway endpoint, one active MetalLB L2 announcer, all three speaker Pods Ready, a 2/2 Available Cloudflare Tunnel Deployment, and an upstream application response through the unchanged cluster-local Istio route.
 
 ## Rollup protocol
 
