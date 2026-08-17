@@ -17,8 +17,7 @@ service:
       protocol: TCP
       targetPort: 443
   annotations:
-    metallb.io/address-pool: homelab-lb
-  loadBalancerIP: 10.43.10.100
+    metallb.io/address-pool: homelab-ingress
   loadBalancerSourceRanges: []
   externalTrafficPolicy: ""
   externalIPs: []
