@@ -9,6 +9,12 @@ metadata:
 spec:
   destination:
     server: https://kubernetes.default.svc
+  ignoreDifferences:
+    - group: apiextensions.k8s.io
+      jsonPointers:
+        - /spec/conversion/webhook/clientConfig/caBundle
+      kind: CustomResourceDefinition
+      name: bgppeers.metallb.io
   project: homelab-platform
   revisionHistoryLimit: 10
   source:
