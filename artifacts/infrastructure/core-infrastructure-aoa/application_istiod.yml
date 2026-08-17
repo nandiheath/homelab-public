@@ -9,6 +9,12 @@ metadata:
 spec:
   destination:
     server: https://kubernetes.default.svc
+  ignoreDifferences:
+    - group: admissionregistration.k8s.io
+      jsonPointers:
+        - /webhooks/0/clientConfig/caBundle
+      kind: ValidatingWebhookConfiguration
+      name: istio-validator-istio-system
   project: homelab-platform
   revisionHistoryLimit: 10
   source:
