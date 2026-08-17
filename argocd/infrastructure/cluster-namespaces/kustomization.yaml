@@ -11,3 +11,4 @@ resources:
   - namespace-cloudflared.yaml
   - namespace-grafana.yaml
   - namespace-longhorn.yaml
+  - namespace-metallb-system.yaml
