@@ -28,7 +28,6 @@ data:
   reposerver.log.level: info
   reposerver.parallelism.limit: "0"
   server.basehref: /
-  server.baseref: /argocd/
   server.dex.server: https://argocd-dex-server:5556
   server.dex.server.strict.tls: "false"
   server.disable.auth: "false"
@@ -38,7 +37,7 @@ data:
   server.log.format: text
   server.log.level: info
   server.repo.server.strict.tls: "false"
-  server.rootpath: /argocd
+  server.rootpath: ""
   server.staticassets: /shared/app
   server.x.frame.options: sameorigin
 kind: ConfigMap

@@ -15,12 +15,9 @@ configs:
     # all hosts are protected by istio mTLS
     server.insecure: true
     
-    server.baseref: /argocd/
-    
-    server.rootpath: /argocd
-  
+
   cm:
-    url: https://zaap.nandi.sh/argocd
+    url: https://argocd.homelab.nandi.sh
     
     # Enable server-side diff for Argo CD
     controller.diff.server.side: "true"
