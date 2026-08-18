@@ -1,6 +1,6 @@
 # HLP-M006 — Argo CD dedicated root URL
 
-- Status: running
+- Status: ready-for-rollup
 - Owner: Main
 
 ## Goal
@@ -9,13 +9,13 @@ Make the reusable Argo CD installation serve from a dedicated hostname root inst
 
 ## Tasks
 
-- [ ] HLP-024 — Update Argo CD root URL
+- [x] HLP-024 — Update Argo CD root URL
 
 ## Acceptance criteria
 
-- [ ] Argo CD advertises the dedicated root URL.
-- [ ] The server no longer requires the legacy subpath.
-- [ ] Source and committed render are synchronized.
+- [x] Argo CD advertises the dedicated root URL.
+- [x] The server no longer requires the legacy subpath.
+- [x] Source and committed render are synchronized.
 
 ## Verification
 
@@ -28,8 +28,8 @@ Make the reusable Argo CD installation serve from a dedicated hostname root inst
 
 ## Completion handoff
 
-- Tasks rolled up:
-- Observed milestone verification:
-- Project status updated:
-- Delivery:
-- Follow-ups:
+- Tasks rolled up: HLP-024
+- Observed milestone verification: Focused Argo CD renders and `./scripts/validate.sh` passed. The live Argo CD Application reconciled the merged revision, `deployment/argocd-server` rolled out successfully, `argocd-cm` advertises `https://argocd-homelab.nandi.sh`, `server.basehref` is `/`, and `server.rootpath` is empty. The coordinated private route returned HTTP 200 before Cloudflare Access and HTTP 302 to Access after protection was enabled.
+- Project status updated: Pending the serial removal commit.
+- Delivery: https://github.com/nandiheath/homelab-public/pull/28, https://github.com/nandiheath/homelab-public/pull/32, and https://github.com/nandiheath/homelab-public/pull/36.
+- Follow-ups: Complete the private status rollup and portfolio milestone after both repository rollups merge.
