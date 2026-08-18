@@ -1,4 +1,4 @@
-# HLP-M006 — Argo CD dedicated root URL
+# HLP-M007 — Argo CD dedicated root URL
 
 - Status: ready-for-rollup
 - Owner: Main
