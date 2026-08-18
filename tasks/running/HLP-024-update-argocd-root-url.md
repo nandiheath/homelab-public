@@ -2,7 +2,7 @@
 
 - Status: ready-for-rollup
 - Owner: Main
-- Milestone: HLP-M006
+- Milestone: HLP-M007
 - Depends on: none
 
 ## Owned paths
@@ -42,4 +42,4 @@ Serve Argo CD from the root of its dedicated public hostname and advertise that 
 - Files changed: `argocd/infrastructure/argocd/values.yaml`, `artifacts/infrastructure/argocd/`.
 - Observed verification: Focused renders completed without error. `./scripts/validate.sh` reported 351 resources, 246 valid, 0 invalid, 0 errors, and 105 schema-skipped. Pull-request checks passed. Live Argo CD reconciliation reached `Synced` and `Healthy`; `argocd-cm` advertises `https://argocd-homelab.nandi.sh`, `server.basehref` is `/`, `server.rootpath` is empty, and `deployment/argocd-server` rolled out successfully. The final endpoint returned HTTP 200 before the coordinated Cloudflare Access gate was enabled and HTTP 302 to Access afterward.
 - Delivery: https://github.com/nandiheath/homelab-public/pull/28 merged as `353064f2e16d4e3ffc36248b0eea162bdf96557b`; https://github.com/nandiheath/homelab-public/pull/32 merged as `5220c1938fff3e8982bc9d0e4190c73b581b79d1`.
-- Follow-ups: Serially roll up HLP-M006 and coordinated private HL-M010.
+- Follow-ups: Serially roll up HLP-M007 and coordinated private HL-M010.
