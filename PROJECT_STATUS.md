@@ -10,6 +10,7 @@ _Last observed: 2026-08-17_
 - HLP-M002 remains a future backup/disaster-recovery planning reminder; it carries no implementation claim and is not evidence of deployed backup infrastructure.
 - Planning is milestone-first: every child task references a parent, and milestone completion requires child rollup plus milestone-level verification.
 - Argo CD bootstrap desired state includes a separate ExternalSecret-backed repository credential for authenticated read-only OCI Helm access to `ghcr.io/nandiheath/charts`. It resolves only `username` and `token` from the existing 1Password ClusterSecretStore, emits no resolved credential or image pull secret, and is paired with an exact private AppProject source allowlist.
+- Argo CD desired state serves from the root of `https://argocd-homelab.nandi.sh`; the legacy shared-host base-reference and root-path overrides are removed.
 - The Istio ingress gateway is a healthy `LoadBalancer` at the reviewed MetalLB address and pool. Ports `15021`, `80`, and `443`, selector identity, and the existing cluster-local Cloudflare Tunnel origin path are preserved.
 
 ## Observed validation
@@ -37,6 +38,7 @@ _Last observed: 2026-08-17_
 - HLP-M005 completed on 2026-08-09. Source and committed artifact use `ghcr.io/nandiheath/charts`, retain `type: helm`, `enableOCI: "true"`, repository-secret labeling, unresolved username/password templates, and the exact `ghcr-chart-read-credentials` remote references. A focused bootstrap render and `./scripts/validate.sh` reported 350 resources, 245 valid, 0 invalid, 0 errors, and 105 schema-skipped; repository task validation and exact boundary inspection passed. The legacy package prefix is absent from current public desired state and status. No private AppProject, wildcard source, image pull secret, resolved credential, bootstrap, cluster, Argo CD, secret-resolution, registry mutation, or deployment operation was added or run. Bootstrap source and artifact ownership returned to blocked HLP-005.
 
 - HLP-M006 completed on 2026-08-17. Focused render, full public validation, and pull-request CI passed. Live inspection confirmed the requested LoadBalancer address, one Ready gateway endpoint, one active MetalLB L2 announcer, all three speaker Pods Ready, a 2/2 Available Cloudflare Tunnel Deployment, and an upstream application response through the unchanged cluster-local Istio route.
+- HLP-M007 completed on 2026-08-18. Focused Argo CD renders and `./scripts/validate.sh` passed with 351 resources, 246 valid, 0 invalid, 0 errors, and 105 schema-skipped. Live Argo CD reconciled the merged URL configuration, remained Healthy, rolled out `deployment/argocd-server`, advertised `https://argocd-homelab.nandi.sh`, and exposed `/` as its base reference with an empty root path. The coordinated private route returned HTTP `200` before the outer gate and HTTP `302` to Cloudflare Access after protection was enabled.
 
 ## Rollup protocol
 
