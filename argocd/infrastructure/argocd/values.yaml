@@ -33,6 +33,8 @@ configs:
       jqPathExpressions:
       - .spec.template.spec.containers[].env[]?.valueFrom.resourceFieldRef.divisor
       
+    # The GitHub App registration must allow this exact callback:
+    # https://argocd-homelab.nandi.sh/api/dex/callback
     dex.config: |
       connectors:
       - type: github
