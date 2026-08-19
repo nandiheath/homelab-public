@@ -1,6 +1,6 @@
 # Project status
 
-_Last observed: 2026-08-17_
+_Last observed: 2026-08-19_
 
 ## Current state
 
@@ -39,7 +39,7 @@ _Last observed: 2026-08-17_
 
 - HLP-M006 completed on 2026-08-17. Focused render, full public validation, and pull-request CI passed. Live inspection confirmed the requested LoadBalancer address, one Ready gateway endpoint, one active MetalLB L2 announcer, all three speaker Pods Ready, a 2/2 Available Cloudflare Tunnel Deployment, and an upstream application response through the unchanged cluster-local Istio route.
 - HLP-M007 completed on 2026-08-18. Focused Argo CD renders and `./scripts/validate.sh` passed with 351 resources, 246 valid, 0 invalid, 0 errors, and 105 schema-skipped. Live Argo CD reconciled the merged URL configuration, remained Healthy, rolled out `deployment/argocd-server`, advertised `https://argocd-homelab.nandi.sh`, and exposed `/` as its base reference with an empty root path. The coordinated private route returned HTTP `200` before the outer gate and HTTP `302` to Cloudflare Access after protection was enabled.
-- The `Nandi HomeLab ArgoCD` GitHub App callback was corrected on 2026-08-18 to `https://argocd-homelab.nandi.sh/api/dex/callback`. GitHub accepted that exact callback for client ID `Iv1.c4bcc7cfd7caf7f0` and presented the application login flow instead of rejecting `redirect_uri`.
+- HLP-M008 completed on 2026-08-19. The `Nandi HomeLab ArgoCD` GitHub App callback is `https://argocd-homelab.nandi.sh/api/dex/callback`; GitHub accepted that exact callback for client ID `Iv1.c4bcc7cfd7caf7f0` and presented the application login flow instead of rejecting `redirect_uri`. The source records the same callback, repository validation reported 351 resources, 246 valid, 0 invalid, 0 errors, and 105 schema-skipped, and implementation plus milestone-evidence pull-request checks passed.
 
 ## Rollup protocol
 
