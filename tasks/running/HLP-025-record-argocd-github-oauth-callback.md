@@ -41,4 +41,4 @@ Record the exact GitHub App callback required by the dedicated Argo CD root URL 
 - Summary: Recorded and corrected the exact GitHub App callback required by the dedicated Argo CD URL.
 - Files changed: `argocd/infrastructure/argocd/values.yaml`, `PROJECT_STATUS.md`, and this task contract.
 - Observed verification: GitHub redirected the exact authorization request to its login flow for `Nandi HomeLab ArgoCD` instead of returning the `redirect_uri` mismatch. `./scripts/validate.sh` reported 351 resources, 246 valid, 0 invalid, 0 errors, and 105 schema-skipped.
-- Follow-ups: Serially roll up HLP-M008 after this task merges.
+- Follow-ups: HLP-M008 records the merged task and criterion-level verification.
