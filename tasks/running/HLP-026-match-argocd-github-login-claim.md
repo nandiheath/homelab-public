@@ -1,6 +1,6 @@
 # HLP-026 — Match Argo CD GitHub login claim
 
-- Status: running
+- Status: ready-for-rollup
 - Owner: Main
 - Milestone: HLP-M009
 - Depends on: none
@@ -27,7 +27,7 @@ Grant the configured GitHub administrator access by evaluating the stable connec
 
 - [x] Source and artifact evaluate `email` and `preferred_username` for RBAC.
 - [x] The configured GitHub login maps to `role:admin` without publishing the private email.
-- [ ] The authenticated administrator can list applications after reconciliation.
+- [x] The authenticated administrator can list applications after reconciliation.
 - [x] Public repository validation passes.
 
 ## Verification
@@ -42,7 +42,7 @@ Grant the configured GitHub administrator access by evaluating the stable connec
 
 ## Completion handoff
 
-- Summary:
-- Files changed:
-- Observed verification:
-- Follow-ups:
+- Summary: Added the GitHub `preferred_username` claim to Argo CD RBAC evaluation while preserving the explicit login-to-admin mapping and empty default role.
+- Files changed: `argocd/infrastructure/argocd/values.yaml`, `artifacts/infrastructure/argocd/configmap_argocd-rbac-cm.yml`, and this task contract.
+- Observed verification: Focused render and `./scripts/validate.sh` passed with 351 resources, 246 valid, 0 invalid, 0 errors, and 105 schema-skipped. Argo CD reconciled merged revision `2304e881932d096afaa46ef20388f3458d4a8cf1` Healthy/Synced; the live ConfigMap maps `nandiheath` to `role:admin` with scopes `[email, preferred_username]`; after reauthentication, the configured administrator observed the application list.
+- Follow-ups: HLP-M009 records criterion-level evidence and is ready for serial rollup.
