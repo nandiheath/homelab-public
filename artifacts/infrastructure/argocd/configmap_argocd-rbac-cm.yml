@@ -5,7 +5,7 @@ data:
     g, nandiheath, role:admin
   policy.default: ""
   policy.matchMode: glob
-  scopes: '[email]'
+  scopes: '[email, preferred_username]'
 kind: ConfigMap
 metadata:
   labels:
