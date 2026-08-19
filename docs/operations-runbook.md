@@ -269,7 +269,7 @@ Require all of the following before closing the maintenance window:
 - Three Ready nodes at `v1.36.2+k3s1`; three healthy voting etcd `v3.6.12-k3s1` members; no learner, stale member, or version skew.
 - Healthy API and Cilium; the Cilium and Cilium Envoy DaemonSets are rolled out, both operator replicas are available, all nodes are Ready, and the temporary DNS probe has proved cluster DNS and been removed. Cilium tracks the unchanged final private artifact with Hubble TLS restored, and no production resource contains `192.0.2.11` or the public example Pod CIDR.
 - Argo CD, 1Password Connect, External Secrets, Longhorn, CNPG, ingress, public root, and private root are Healthy; every expected Application is Synced and Healthy; no legacy Argo owner remains.
-- Exactly five newly created Bound PVCs and clean/empty application smoke-test results.
+- Exactly three newly created Bound PVCs: the two reviewed Immich claims and the standalone Redis claim; plus clean/empty application smoke-test results.
 - No temporary credential file on controller or node and no token in process arguments, units, logs, or fact cache.
 - Longhorn desired state reports `defaultSettings.nodeDrainPolicy: block-for-eviction`; no backup target or recurring backup job was added.
 
