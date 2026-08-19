@@ -1,6 +1,6 @@
 # HLP-005 - Clean latest-minor cluster rebuild
 
-- Status: running
+- Status: ready-for-rollup
 - Owner: Main
 - Milestone: HLP-M003
 - Depends on: HLP-004
@@ -71,7 +71,7 @@ Update the operator runbook and lifecycle skill for the direct `v1.36.2+k3s1` in
 
 ## Blockers
 
-- Both GitOps roots now resolve merged `main` paths and the infrastructure boundary remains healthy, but final acceptance exposed source-level Istio webhook-defaulting and workload convergence defects. The reviewed public repair must publish before its private counterpart, then Argo CD must reconcile before final Application, storage, workload, ingress, smoke, and residue evidence can be recorded. Do not rerun bootstrap.
+- None.
 
 ## Completion handoff
 
@@ -93,3 +93,7 @@ Update the operator runbook and lifecycle skill for the direct `v1.36.2+k3s1` in
 - Read-only final-acceptance inspection on 2026-08-17 confirmed both replacement roots at merged revisions, the API, three Ready nodes, Cilium, Istio, Argo CD, Hubble TLS, all APIServices, and three Bound PVCs. It isolated controller-defaulted Istio webhook failure policies plus private Grafana, Redis, and database desired-state defects without changing the cluster.
 - Convergence-repair validation on 2026-08-17 passed public `make validate` with `51` Ansible files at zero failures/warnings and `351` rendered resources (`246` valid, `0` invalid, `0` errors, `105` schema-skipped), private `make validate`, and the cross-repository graph validator. Focused renders completed; no live cluster mutation occurred.
 - Final contract validation on 2026-08-19 aligned acceptance with the reviewed desired state: two Immich claims plus one standalone Redis claim. Public `make validate` passed with `51` Ansible files at zero failures/warnings and `351` rendered resources (`246` valid, `0` invalid, `0` errors, `105` schema-skipped); private `make validate` and the cross-repository graph validator passed. Live acceptance remains pending only on pruning the obsolete Prometheus route and repeating the read-only route/residue checks.
+- Final acceptance completed on 2026-08-19 after the reviewed public cleanup merged before its private counterpart and Argo CD reconciled both roots. Bootstrap was not rerun. Verbose API readiness passed all `37` checks including etcd; exactly three Ready nodes reported the pinned K3s version; all `25` Applications were Healthy/Synced; all `76` Pods were Running or Succeeded; all `42` workload controllers matched desired Ready/Available counts; all `44` APIServices were Available; and exactly three reviewed PVCs were Bound.
+- Hubble TLS was Ready, both control-plane namespaces remained outside ambient mode, the Longhorn default reported `block-for-eviction`, and no recurring backup job or backup-related default existed. Retained ingress probes returned expected healthy or authentication-gated statuses; the obsolete Prometheus VirtualService was absent and its former path returned HTTP `404`.
+- The bootstrap `always` cleanup remained intact, no temporary YAML credential manifest remained in the controller temp directory, and repository validation retained the unresolved-secret boundary. The two operator-owned mode-`0600` Connect inputs are durable protected inputs, not bootstrap residue. No credential value or private topology was recorded here.
+- Acceptance criteria 58-64 are satisfied by the recorded phase evidence and these final read-only observations. No acceptance check was skipped or failed.
