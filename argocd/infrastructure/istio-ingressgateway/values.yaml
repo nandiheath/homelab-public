@@ -16,6 +16,10 @@ service:
       port: 443
       protocol: TCP
       targetPort: 443
+    - name: tls-mqtt
+      port: 8883
+      protocol: TCP
+      targetPort: 8883
   annotations:
     metallb.io/address-pool: homelab-ingress
   loadBalancerSourceRanges: []
