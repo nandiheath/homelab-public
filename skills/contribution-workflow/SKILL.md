@@ -21,5 +21,6 @@ Apply this skill to every repository change, including documentation, configurat
    - **Risk and rollout** — operational impact, generated-artifact impact, or `None` when applicable.
    - **Follow-ups** — remaining work, or `None`.
 5. Keep unrelated pre-existing work out of the commit and PR. State it explicitly when it blocks a clean change.
+6. Leave no staged, unstaged, or untracked files. Run `agent-workspace repo-handoff validate --root . --pr <URL>` after pushing; handoff is invalid unless the exact local commit matches its upstream and the pull-request URL is reviewable.
 
-For a task-lifecycle change, the serial rollup owner creates or updates the PR after integration validation. Implementation agents record their observed proof in the task handoff; they do not bypass the rollup process.
+Blocked or incomplete work that is coherent enough to preserve uses a draft pull request. Never transfer a dirty checkout to the next session. For a task-lifecycle change, the serial rollup owner creates or updates the PR after integration validation. Implementation agents record their observed proof and delivery URL in the task handoff; they do not bypass the rollup process.
