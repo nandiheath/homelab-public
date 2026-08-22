@@ -1,0 +1,21 @@
+---
+apiVersion: v1
+data:
+  barman_cloud_manifest_sha256: sha256:8d4f1719cc54891ddffd7633279ec93b5d2cc547df8684c3b84f3b156a615e7c
+  barman_cloud_manifest_url: https://github.com/cloudnative-pg/plugin-barman-cloud/releases/download/v0.14.0/manifest.yaml
+  barman_cloud_version: 0.14.0
+  cnpg_manifest_sha256: sha256:f8bede43fe4ee0d478c2355b204a36876b2ae4faac60f2a9452280b293da3b88
+  cnpg_manifest_url: https://github.com/cloudnative-pg/cloudnative-pg/releases/download/v1.30.0/cnpg-1.30.0.yaml
+  cnpg_version: 1.30.0
+  postgres_operand_policy: unchanged-by-this-task
+kind: ConfigMap
+metadata:
+  annotations:
+    homelab.nandi.sh/barman-release-commit: 1e13020fe5f09fd8fc29ea03828f7b61375b3721
+    homelab.nandi.sh/cnpg-release-commit: 4b5e244a7d031f67e025c83c1555e7726ecbbfa1
+    homelab.nandi.sh/source-integrity: release-asset-digests
+  labels:
+    app.kubernetes.io/managed-by: homelab
+    app.kubernetes.io/part-of: cnpg-platform
+  name: cnpg-platform-source-integrity
+  namespace: cnpg-system
