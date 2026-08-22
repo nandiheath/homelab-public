@@ -2,7 +2,14 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
 
-# https://cloudnative-pg.io/documentation/current/installation_upgrade/
+# CloudNativePG 1.30.0 is pinned to the v1.30.0 release commit. The
+# release asset digest is recorded in docs/cloudnativepg-platform.md.
+# https://github.com/cloudnative-pg/cloudnative-pg/releases/tag/v1.30.0
+# https://cloudnative-pg.io/docs/1.26/
 resources:
-  - https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.27/releases/cnpg-1.27.0.yaml
+  - https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/4b5e244a7d031f67e025c83c1555e7726ecbbfa1/releases/cnpg-1.30.0.yaml
+  # Barman Cloud plugin v0.14.0 release asset; digest is recorded in docs.
+  # https://github.com/cloudnative-pg/plugin-barman-cloud/releases/tag/v0.14.0
+  - https://github.com/cloudnative-pg/plugin-barman-cloud/releases/download/v0.14.0/manifest.yaml
   - configmap-operator-config.yaml
+  - source-integrity.yaml
