@@ -1,6 +1,6 @@
 # HLP-M010 — Ambient ingress upstream transport
 
-- Status: running
+- Status: ready-for-rollup
 - Owner: Main
 
 ## Goal
@@ -9,14 +9,14 @@ Make injected Istio gateways originate HBONE to ambient workloads so ingress-to-
 
 ## Tasks
 
-- [ ] HLP-027 — Enable HBONE for injected Istio gateways
+- [x] HLP-027 — Enable HBONE for injected Istio gateways
 
 ## Acceptance criteria
 
-- [ ] Istio proxy defaults advertise HBONE capability to injected proxies.
-- [ ] The ingress gateway rolls out with explicit HBONE node metadata and retains its reviewed Service contract.
-- [ ] Public rendering and validation pass with deterministic committed artifacts.
-- [ ] After separately authorized reconciliation, an ingress request reaches the ambient Homelab Hub workload and returns the application authentication response rather than an upstream transport reset.
+- [x] Istio proxy defaults advertise HBONE capability to injected proxies.
+- [x] The ingress gateway rolls out with explicit HBONE node metadata and retains its reviewed Service contract.
+- [x] Public rendering and validation pass with deterministic committed artifacts.
+- [x] After separately authorized reconciliation, an ingress request reaches the ambient Homelab Hub workload and returns the application authentication response rather than an upstream transport reset.
 
 ## Verification
 
@@ -25,11 +25,11 @@ Make injected Istio gateways originate HBONE to ambient workloads so ingress-to-
 
 ## Blockers
 
-- Live reconciliation requires explicit current-session authorization.
+- None; live reconciliation completed under the user's current-session authorization.
 
 ## Completion handoff
 
-- Tasks rolled up:
-- Observed milestone verification:
-- Project status updated:
-- Follow-ups:
+- Tasks rolled up: HLP-027, delivered through pull requests #50, #51, and #52.
+- Observed milestone verification: Istio base, CNI, istiod, ztunnel, and ingress gateway are Healthy/Synced on 1.30.3. The live gateway advertises HBONE, discovers both Hub endpoints through `connect_originate` with `tunnel: http`, and three consecutive external requests returned the Hub's JSON 401 authentication response. `./scripts/validate.sh` reported 371 resources, 260 valid, 0 invalid, and 0 errors; task lifecycle validation and all six pull-request `Render and validate` checks passed.
+- Project status updated: Yes; the supported Istio release and observed ambient ingress result are recorded without private topology.
+- Follow-ups: None for ambient ingress transport.
