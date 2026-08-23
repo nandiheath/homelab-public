@@ -1,6 +1,6 @@
 # Project status
 
-_Last observed: 2026-08-19_
+_Last observed: 2026-08-22_
 
 ## Current state
 
@@ -42,6 +42,7 @@ _Last observed: 2026-08-19_
 - HLP-M008 completed on 2026-08-19. The `Nandi HomeLab ArgoCD` GitHub App callback is `https://argocd-homelab.nandi.sh/api/dex/callback`; GitHub accepted that exact callback for client ID `Iv1.c4bcc7cfd7caf7f0` and presented the application login flow instead of rejecting `redirect_uri`. The source records the same callback, repository validation reported 351 resources, 246 valid, 0 invalid, 0 errors, and 105 schema-skipped, and implementation plus milestone-evidence pull-request checks passed.
 - HLP-M003 final validation passed with `51` Ansible files at zero failures/warnings and `351` rendered resources (`246` valid, `0` invalid, `0` errors, `105` schema-skipped); private validation and the public/private ownership graph also passed. Final read-only acceptance found all API readiness checks passing, three Ready pinned-version nodes, every expected Application Healthy/Synced, every workload controller converged, exactly three reviewed PVCs Bound, Hubble TLS Ready, both control-plane namespaces outside ambient mode, retained ingress routes healthy, the obsolete Prometheus route absent, and no backup policy or bootstrap-temporary credential manifest. No private topology or credential value is recorded here.
 - HLP-M009 completed on 2026-08-19. Argo CD RBAC now evaluates the Dex `preferred_username` claim alongside `email`, preserves an empty default role, and maps the configured GitHub login to `role:admin` without publishing the private email. Focused rendering, repository validation, and pull-request checks passed; live Argo CD reconciled revision `2304e881932d096afaa46ef20388f3458d4a8cf1` Healthy/Synced with the expected RBAC ConfigMap, and the authenticated administrator confirmed applications are visible after reauthentication.
+- The reusable MQTT ingress-port contract completed on 2026-08-22 via pull request #48. Source and rendered gateway Service preserve ports `15021`, `80`, and `443`, add exactly one `8883`/`tls-mqtt` port, retain the existing LoadBalancer contract, and contain no private hostname, address, broker, credential, or route.
 
 ## Rollup protocol
 
