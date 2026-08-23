@@ -8,8 +8,8 @@ metadata:
     app.kubernetes.io/instance: istio-base
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/part-of: istio
-    app.kubernetes.io/version: 1.24.5
-    helm.sh/chart: base-1.24.5
+    app.kubernetes.io/version: 1.30.3
+    helm.sh/chart: base-1.30.3
   name: requestauthentications.security.istio.io
 spec:
   group: security.istio.io
@@ -86,7 +86,7 @@ spec:
                         type: string
                         x-kubernetes-validations:
                           - message: url must have scheme http:// or https://
-                            rule: url(self).getScheme() in ['http', 'https']
+                            rule: url(self).getScheme() in ["http", "https"]
                       jwksUri:
                         description: URL of the provider's public key set to validate signature of the JWT.
                         maxLength: 2048
@@ -94,7 +94,7 @@ spec:
                         type: string
                         x-kubernetes-validations:
                           - message: url must have scheme http:// or https://
-                            rule: url(self).getScheme() in ['http', 'https']
+                            rule: url(self).getScheme() in ["http", "https"]
                       outputClaimToHeaders:
                         description: This field specifies a list of operations to copy the claim to HTTP headers on a successfully verified token.
                         items:
@@ -116,18 +116,23 @@ spec:
                       outputPayloadToHeader:
                         description: This field specifies the header name to output a successfully verified JWT payload to the backend.
                         type: string
+                      spaceDelimitedClaims:
+                        description: List of JWT claim names that should be treated as space-delimited strings.
+                        items:
+                          minLength: 1
+                          type: string
+                        maxItems: 64
+                        type: array
                       timeout:
                         description: The maximum amount of time that the resolver, determined by the PILOT_JWT_ENABLE_REMOTE_JWKS environment variable, will spend waiting for the JWKS to be fetched.
                         type: string
                         x-kubernetes-validations:
                           - message: must be a valid duration greater than 1ms
                             rule: duration(self) >= duration('1ms')
-                    required:
-                      - issuer
                     type: object
                     x-kubernetes-validations:
                       - message: only one of jwks or jwksUri can be set
-                        rule: (has(self.jwksUri)?1:0)+(has(self.jwks_uri)?1:0)+(has(self.jwks)?1:0)<=1
+                        rule: '(has(self.jwksUri) ? 1 : 0) + (has(self.jwks_uri) ? 1 : 0) + (has(self.jwks) ? 1 : 0) <= 1'
                   maxItems: 4096
                   type: array
                 selector:
@@ -139,13 +144,13 @@ spec:
                         type: string
                         x-kubernetes-validations:
                           - message: wildcard not allowed in label value match
-                            rule: '!self.contains(''*'')'
+                            rule: '!self.contains("*")'
                       description: One or more labels that indicate a specific set of pods/VMs on which a policy should be applied.
                       maxProperties: 4096
                       type: object
                       x-kubernetes-validations:
                         - message: wildcard not allowed in label key match
-                          rule: self.all(key, !key.contains('*'))
+                          rule: self.all(key, !key.contains("*"))
                         - message: key must not be empty
                           rule: self.all(key, key.size() != 0)
                   type: object
@@ -177,9 +182,6 @@ spec:
                     - kind
                     - name
                   type: object
-                  x-kubernetes-validations:
-                    - message: Support kinds are core/Service, networking.istio.io/ServiceEntry, gateway.networking.k8s.io/Gateway
-                      rule: '[self.group, self.kind] in [[''core'',''Service''], ['''',''Service''], [''gateway.networking.k8s.io'',''Gateway''], [''networking.istio.io'',''ServiceEntry'']]'
                 targetRefs:
                   description: Optional.
                   items:
@@ -210,15 +212,12 @@ spec:
                       - kind
                       - name
                     type: object
-                    x-kubernetes-validations:
-                      - message: Support kinds are core/Service, networking.istio.io/ServiceEntry, gateway.networking.k8s.io/Gateway
-                        rule: '[self.group, self.kind] in [[''core'',''Service''], ['''',''Service''], [''gateway.networking.k8s.io'',''Gateway''], [''networking.istio.io'',''ServiceEntry'']]'
                   maxItems: 16
                   type: array
               type: object
               x-kubernetes-validations:
                 - message: only one of targetRefs or selector can be set
-                  rule: (has(self.selector)?1:0)+(has(self.targetRef)?1:0)+(has(self.targetRefs)?1:0)<=1
+                  rule: '(has(self.selector) ? 1 : 0) + (has(self.targetRef) ? 1 : 0) + (has(self.targetRefs) ? 1 : 0) <= 1'
             status:
               properties:
                 conditions:
@@ -236,6 +235,12 @@ spec:
                       message:
                         description: Human-readable message indicating details about last transition.
                         type: string
+                      observedGeneration:
+                        anyOf:
+                          - type: integer
+                          - type: string
+                        description: Resource Generation to which the Condition refers.
+                        x-kubernetes-int-or-string: true
                       reason:
                         description: Unique, one-word, CamelCase reason for the condition's last transition.
                         type: string
@@ -251,7 +256,6 @@ spec:
                   anyOf:
                     - type: integer
                     - type: string
-                  description: Resource Generation to which the Reconciled Condition refers.
                   x-kubernetes-int-or-string: true
                 validationMessages:
                   description: Includes any errors or warnings detected by Istio's analyzers.
@@ -286,7 +290,7 @@ spec:
               x-kubernetes-preserve-unknown-fields: true
           type: object
       served: true
-      storage: false
+      storage: true
       subresources:
         status: {}
     - name: v1beta1
@@ -350,7 +354,7 @@ spec:
                         type: string
                         x-kubernetes-validations:
                           - message: url must have scheme http:// or https://
-                            rule: url(self).getScheme() in ['http', 'https']
+                            rule: url(self).getScheme() in ["http", "https"]
                       jwksUri:
                         description: URL of the provider's public key set to validate signature of the JWT.
                         maxLength: 2048
@@ -358,7 +362,7 @@ spec:
                         type: string
                         x-kubernetes-validations:
                           - message: url must have scheme http:// or https://
-                            rule: url(self).getScheme() in ['http', 'https']
+                            rule: url(self).getScheme() in ["http", "https"]
                       outputClaimToHeaders:
                         description: This field specifies a list of operations to copy the claim to HTTP headers on a successfully verified token.
                         items:
@@ -380,18 +384,23 @@ spec:
                       outputPayloadToHeader:
                         description: This field specifies the header name to output a successfully verified JWT payload to the backend.
                         type: string
+                      spaceDelimitedClaims:
+                        description: List of JWT claim names that should be treated as space-delimited strings.
+                        items:
+                          minLength: 1
+                          type: string
+                        maxItems: 64
+                        type: array
                       timeout:
                         description: The maximum amount of time that the resolver, determined by the PILOT_JWT_ENABLE_REMOTE_JWKS environment variable, will spend waiting for the JWKS to be fetched.
                         type: string
                         x-kubernetes-validations:
                           - message: must be a valid duration greater than 1ms
                             rule: duration(self) >= duration('1ms')
-                    required:
-                      - issuer
                     type: object
                     x-kubernetes-validations:
                       - message: only one of jwks or jwksUri can be set
-                        rule: (has(self.jwksUri)?1:0)+(has(self.jwks_uri)?1:0)+(has(self.jwks)?1:0)<=1
+                        rule: '(has(self.jwksUri) ? 1 : 0) + (has(self.jwks_uri) ? 1 : 0) + (has(self.jwks) ? 1 : 0) <= 1'
                   maxItems: 4096
                   type: array
                 selector:
@@ -403,13 +412,13 @@ spec:
                         type: string
                         x-kubernetes-validations:
                           - message: wildcard not allowed in label value match
-                            rule: '!self.contains(''*'')'
+                            rule: '!self.contains("*")'
                       description: One or more labels that indicate a specific set of pods/VMs on which a policy should be applied.
                       maxProperties: 4096
                       type: object
                       x-kubernetes-validations:
                         - message: wildcard not allowed in label key match
-                          rule: self.all(key, !key.contains('*'))
+                          rule: self.all(key, !key.contains("*"))
                         - message: key must not be empty
                           rule: self.all(key, key.size() != 0)
                   type: object
@@ -441,9 +450,6 @@ spec:
                     - kind
                     - name
                   type: object
-                  x-kubernetes-validations:
-                    - message: Support kinds are core/Service, networking.istio.io/ServiceEntry, gateway.networking.k8s.io/Gateway
-                      rule: '[self.group, self.kind] in [[''core'',''Service''], ['''',''Service''], [''gateway.networking.k8s.io'',''Gateway''], [''networking.istio.io'',''ServiceEntry'']]'
                 targetRefs:
                   description: Optional.
                   items:
@@ -474,15 +480,12 @@ spec:
                       - kind
                       - name
                     type: object
-                    x-kubernetes-validations:
-                      - message: Support kinds are core/Service, networking.istio.io/ServiceEntry, gateway.networking.k8s.io/Gateway
-                        rule: '[self.group, self.kind] in [[''core'',''Service''], ['''',''Service''], [''gateway.networking.k8s.io'',''Gateway''], [''networking.istio.io'',''ServiceEntry'']]'
                   maxItems: 16
                   type: array
               type: object
               x-kubernetes-validations:
                 - message: only one of targetRefs or selector can be set
-                  rule: (has(self.selector)?1:0)+(has(self.targetRef)?1:0)+(has(self.targetRefs)?1:0)<=1
+                  rule: '(has(self.selector) ? 1 : 0) + (has(self.targetRef) ? 1 : 0) + (has(self.targetRefs) ? 1 : 0) <= 1'
             status:
               properties:
                 conditions:
@@ -500,6 +503,12 @@ spec:
                       message:
                         description: Human-readable message indicating details about last transition.
                         type: string
+                      observedGeneration:
+                        anyOf:
+                          - type: integer
+                          - type: string
+                        description: Resource Generation to which the Condition refers.
+                        x-kubernetes-int-or-string: true
                       reason:
                         description: Unique, one-word, CamelCase reason for the condition's last transition.
                         type: string
@@ -515,7 +524,6 @@ spec:
                   anyOf:
                     - type: integer
                     - type: string
-                  description: Resource Generation to which the Reconciled Condition refers.
                   x-kubernetes-int-or-string: true
                 validationMessages:
                   description: Includes any errors or warnings detected by Istio's analyzers.
@@ -550,6 +558,6 @@ spec:
               x-kubernetes-preserve-unknown-fields: true
           type: object
       served: true
-      storage: true
+      storage: false
       subresources:
         status: {}
