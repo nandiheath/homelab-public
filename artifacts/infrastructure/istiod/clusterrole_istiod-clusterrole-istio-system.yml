@@ -8,8 +8,8 @@ metadata:
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/name: istiod
     app.kubernetes.io/part-of: istio
-    app.kubernetes.io/version: 1.24.5
-    helm.sh/chart: istiod-1.24.5
+    app.kubernetes.io/version: 1.30.3
+    helm.sh/chart: istiod-1.30.3
     release: istiod
   name: istiod-clusterrole-istio-system
 rules:
@@ -162,12 +162,20 @@ rules:
       - create
   - apiGroups:
       - gateway.networking.k8s.io
+      - gateway.networking.x-k8s.io
     resources:
       - '*'
     verbs:
       - get
       - watch
       - list
+  - apiGroups:
+      - gateway.networking.x-k8s.io
+    resources:
+      - xbackendtrafficpolicies/status
+    verbs:
+      - update
+      - patch
   - apiGroups:
       - gateway.networking.k8s.io
     resources:
@@ -180,6 +188,7 @@ rules:
       - tcproutes/status
       - tlsroutes/status
       - udproutes/status
+      - listenersets/status
     verbs:
       - update
       - patch
@@ -192,6 +201,21 @@ rules:
       - update
       - patch
       - delete
+  - apiGroups:
+      - inference.networking.k8s.io
+    resources:
+      - inferencepools
+    verbs:
+      - get
+      - watch
+      - list
+  - apiGroups:
+      - inference.networking.k8s.io
+    resources:
+      - inferencepools/status
+    verbs:
+      - update
+      - patch
   - apiGroups:
       - ""
     resources:

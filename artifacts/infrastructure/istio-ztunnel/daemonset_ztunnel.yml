@@ -7,8 +7,8 @@ metadata:
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/name: ztunnel
     app.kubernetes.io/part-of: istio
-    app.kubernetes.io/version: 1.24.5
-    helm.sh/chart: ztunnel-1.24.5
+    app.kubernetes.io/version: 1.30.3
+    helm.sh/chart: ztunnel-1.30.3
   name: ztunnel
   namespace: istio-system
 spec:
@@ -27,8 +27,8 @@ spec:
         app.kubernetes.io/managed-by: Helm
         app.kubernetes.io/name: ztunnel
         app.kubernetes.io/part-of: istio
-        app.kubernetes.io/version: 1.24.5
-        helm.sh/chart: ztunnel-1.24.5
+        app.kubernetes.io/version: 1.30.3
+        helm.sh/chart: ztunnel-1.30.3
         istio.io/dataplane-mode: none
         sidecar.istio.io/inject: "false"
     spec:
@@ -71,7 +71,12 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: spec.serviceAccountName
-          image: docker.io/istio/ztunnel:1.24.5
+            - name: ZTUNNEL_CPU_LIMIT
+              valueFrom:
+                resourceFieldRef:
+                  divisor: "1"
+                  resource: limits.cpu
+          image: registry.istio.io/release/ztunnel:1.30.3
           name: istio-proxy
           ports:
             - containerPort: 15020
@@ -141,3 +146,4 @@ spec:
     rollingUpdate:
       maxSurge: 1
       maxUnavailable: 0
+    type: RollingUpdate

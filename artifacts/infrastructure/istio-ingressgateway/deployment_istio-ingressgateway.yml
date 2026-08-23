@@ -8,9 +8,10 @@ metadata:
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/name: istio-ingressgateway
     app.kubernetes.io/part-of: istio
-    app.kubernetes.io/version: 1.24.5
-    helm.sh/chart: gateway-1.24.5
+    app.kubernetes.io/version: 1.30.3
+    helm.sh/chart: gateway-1.30.3
     istio: ingressgateway
+    istio.io/dataplane-mode: none
   name: istio-ingressgateway
   namespace: istio-system
 spec:
@@ -32,9 +33,10 @@ spec:
         app.kubernetes.io/managed-by: Helm
         app.kubernetes.io/name: istio-ingressgateway
         app.kubernetes.io/part-of: istio
-        app.kubernetes.io/version: 1.24.5
-        helm.sh/chart: gateway-1.24.5
+        app.kubernetes.io/version: 1.30.3
+        helm.sh/chart: gateway-1.30.3
         istio: ingressgateway
+        istio.io/dataplane-mode: none
         sidecar.istio.io/inject: "true"
     spec:
       containers:
@@ -61,9 +63,7 @@ spec:
                 - ALL
             privileged: false
             readOnlyRootFilesystem: true
-            runAsGroup: 1337
             runAsNonRoot: true
-            runAsUser: 1337
       securityContext:
         sysctls:
           - name: net.ipv4.ip_unprivileged_port_start

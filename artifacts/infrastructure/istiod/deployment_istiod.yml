@@ -8,8 +8,8 @@ metadata:
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/name: istiod
     app.kubernetes.io/part-of: istio
-    app.kubernetes.io/version: 1.24.5
-    helm.sh/chart: istiod-1.24.5
+    app.kubernetes.io/version: 1.30.3
+    helm.sh/chart: istiod-1.30.3
     install.operator.istio.io/owning-resource: unknown
     istio: pilot
     istio.io/rev: default
@@ -37,8 +37,8 @@ spec:
         app.kubernetes.io/managed-by: Helm
         app.kubernetes.io/name: istiod
         app.kubernetes.io/part-of: istio
-        app.kubernetes.io/version: 1.24.5
-        helm.sh/chart: istiod-1.24.5
+        app.kubernetes.io/version: 1.30.3
+        helm.sh/chart: istiod-1.30.3
         install.operator.istio.io/owning-resource: unknown
         istio: pilot
         istio.io/dataplane-mode: none
@@ -87,10 +87,6 @@ spec:
               value: "false"
             - name: CLUSTER_ID
               value: Kubernetes
-            - name: GOMEMLIMIT
-              valueFrom:
-                resourceFieldRef:
-                  resource: limits.memory
             - name: GOMAXPROCS
               valueFrom:
                 resourceFieldRef:
@@ -98,7 +94,7 @@ spec:
                   resource: limits.cpu
             - name: PLATFORM
               value: ""
-          image: docker.io/istio/pilot:1.24.5
+          image: registry.istio.io/release/pilot:1.30.3
           name: discovery
           ports:
             - containerPort: 8080

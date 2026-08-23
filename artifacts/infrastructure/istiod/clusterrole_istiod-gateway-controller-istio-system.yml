@@ -8,8 +8,8 @@ metadata:
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/name: istiod
     app.kubernetes.io/part-of: istio
-    app.kubernetes.io/version: 1.24.5
-    helm.sh/chart: istiod-1.24.5
+    app.kubernetes.io/version: 1.30.3
+    helm.sh/chart: istiod-1.30.3
     release: istiod
   name: istiod-gateway-controller-istio-system
 rules:
@@ -17,6 +17,30 @@ rules:
       - apps
     resources:
       - deployments
+    verbs:
+      - get
+      - watch
+      - list
+      - update
+      - patch
+      - create
+      - delete
+  - apiGroups:
+      - autoscaling
+    resources:
+      - horizontalpodautoscalers
+    verbs:
+      - get
+      - watch
+      - list
+      - update
+      - patch
+      - create
+      - delete
+  - apiGroups:
+      - policy
+    resources:
+      - poddisruptionbudgets
     verbs:
       - get
       - watch

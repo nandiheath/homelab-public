@@ -1,12 +1,29 @@
 ---
 apiVersion: v1
 data:
-  AMBIENT_DNS_CAPTURE: "false"
+  AMBIENT_DNS_CAPTURE: "true"
   AMBIENT_ENABLED: "true"
+  AMBIENT_ENABLEMENT_SELECTOR: |-
+    - podSelector:
+        matchLabels:
+          istio.io/dataplane-mode: ambient
+    - namespaceSelector:
+        matchLabels:
+          istio.io/dataplane-mode: ambient
+      podSelector:
+        matchExpressions:
+        - key: istio.io/dataplane-mode
+          operator: NotIn
+          values:
+          - none
   AMBIENT_IPV6: "true"
+  AMBIENT_RECONCILE_POD_RULES_ON_STARTUP: "true"
   CHAINED_CNI_PLUGIN: "true"
-  CURRENT_AGENT_VERSION: 1.24.5
+  CURRENT_AGENT_VERSION: 1.30.3
+  ENABLE_AMBIENT_DETECTION_RETRY: "false"
   EXCLUDE_NAMESPACES: kube-system
+  ISTIO_OWNED_CNI_CONFIG: "false"
+  NATIVE_NFTABLES: "false"
   REPAIR_BROKEN_POD_LABEL_KEY: cni.istio.io/uninitialized
   REPAIR_BROKEN_POD_LABEL_VALUE: "true"
   REPAIR_DELETE_PODS: "false"
@@ -22,8 +39,8 @@ metadata:
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/name: istio-cni
     app.kubernetes.io/part-of: istio
-    app.kubernetes.io/version: 1.24.5
-    helm.sh/chart: cni-1.24.5
+    app.kubernetes.io/version: 1.30.3
+    helm.sh/chart: cni-1.30.3
     install.operator.istio.io/owning-resource: unknown
     istio.io/rev: default
     operator.istio.io/component: Cni

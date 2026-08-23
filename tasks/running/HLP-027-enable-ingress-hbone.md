@@ -7,9 +7,16 @@
 
 ## Owned paths
 
+- `argocd/infrastructure/istio-base/kustomization.yaml`
+- `argocd/infrastructure/istio-cni/kustomization.yaml`
 - `argocd/infrastructure/istiod/kustomization.yaml`
+- `argocd/infrastructure/istio-ztunnel/kustomization.yaml`
+- `argocd/infrastructure/istio-ingressgateway/kustomization.yaml`
 - `argocd/infrastructure/istio-ingressgateway/values.yaml`
+- `artifacts/infrastructure/istio-base/`
+- `artifacts/infrastructure/istio-cni/`
 - `artifacts/infrastructure/istiod/`
+- `artifacts/infrastructure/istio-ztunnel/`
 - `artifacts/infrastructure/istio-ingressgateway/`
 - `scripts/validate.sh`
 - `tasks/running/HLP-027-enable-ingress-hbone.md`
@@ -22,14 +29,16 @@ Enable injected Istio gateways to discover ambient workload endpoints as HBONE t
 
 ## Implementation
 
-1. Add the documented `ISTIO_META_ENABLE_HBONE` proxy metadata to Istio mesh defaults.
-2. Set the same explicit metadata on the ingress gateway chart so its Deployment rolls and the running proxy advertises HBONE capability.
-3. Extend repository validation to assert both source and rendered contracts.
-4. Regenerate only the affected Istio artifacts through the repository renderer.
-5. Under the existing current-session deployment authorization, reconcile and prove the gateway uses HBONE to the ambient Homelab Hub workload.
+1. Upgrade every Istio base, CNI, control-plane, ztunnel, and gateway chart together from unsupported 1.24.5 to supported 1.30.3; Istio fixed the observed sidecar/gateway-to-ambient `WRONG_VERSION_NUMBER` HBONE failure in 1.25.
+2. Add the documented `ISTIO_META_ENABLE_HBONE` proxy metadata to Istio mesh defaults.
+3. Set the same explicit metadata on the ingress gateway chart so its Deployment rolls and the running proxy advertises HBONE capability.
+4. Extend repository validation to assert the coherent Istio version and both source and rendered HBONE contracts.
+5. Regenerate only the affected Istio artifacts through the repository renderer.
+6. Under the existing current-session deployment authorization, reconcile and prove the gateway uses HBONE to the ambient Homelab Hub workload.
 
 ## Acceptance criteria
 
+- [ ] Source and rendered Istio base, CNI, control-plane, ztunnel, and gateway resources use the same supported 1.30.3 release.
 - [ ] Source and rendered mesh config set `defaultConfig.proxyMetadata.ISTIO_META_ENABLE_HBONE` to string `"true"`.
 - [ ] Source and rendered ingress Deployment set `ISTIO_META_ENABLE_HBONE` to string `"true"` while its Service contract is unchanged.
 - [ ] Focused renders, full repository validation, and task lifecycle validation pass.

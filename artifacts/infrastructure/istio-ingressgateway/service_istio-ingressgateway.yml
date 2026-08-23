@@ -10,9 +10,10 @@ metadata:
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/name: istio-ingressgateway
     app.kubernetes.io/part-of: istio
-    app.kubernetes.io/version: 1.24.5
-    helm.sh/chart: gateway-1.24.5
+    app.kubernetes.io/version: 1.30.3
+    helm.sh/chart: gateway-1.30.3
     istio: ingressgateway
+    istio.io/dataplane-mode: none
   name: istio-ingressgateway
   namespace: istio-system
 spec:

@@ -20,6 +20,35 @@ if [[ "$(homelab version)" != "0.5.0" ]]; then
   exit 1
 fi
 
+expected_istio_version=1.30.3
+istio_sources=(
+  argocd/infrastructure/istio-base/kustomization.yaml
+  argocd/infrastructure/istio-cni/kustomization.yaml
+  argocd/infrastructure/istiod/kustomization.yaml
+  argocd/infrastructure/istio-ztunnel/kustomization.yaml
+  argocd/infrastructure/istio-ingressgateway/kustomization.yaml
+)
+for source in "${istio_sources[@]}"; do
+  if [[ "$(yq -r '.helmCharts[].version' "$source")" != "$expected_istio_version" ]]; then
+    printf 'Error: %s must use Istio %s.\n' "$source" "$expected_istio_version" >&2
+    exit 1
+  fi
+done
+
+istio_artifacts=(
+  artifacts/infrastructure/istio-base/customresourcedefinition_authorizationpolicies-security-istio-io.yml
+  artifacts/infrastructure/istio-cni/daemonset_istio-cni-node.yml
+  artifacts/infrastructure/istiod/deployment_istiod.yml
+  artifacts/infrastructure/istio-ztunnel/daemonset_ztunnel.yml
+  artifacts/infrastructure/istio-ingressgateway/deployment_istio-ingressgateway.yml
+)
+for artifact in "${istio_artifacts[@]}"; do
+  if [[ "$(yq -r '.metadata.labels."app.kubernetes.io/version"' "$artifact")" != "$expected_istio_version" ]]; then
+    printf 'Error: %s must render Istio %s.\n' "$artifact" "$expected_istio_version" >&2
+    exit 1
+  fi
+done
+
 if [[ "$(yq -o=json -I=0 '
   .helmCharts[]
   | select(.name == "istiod")
