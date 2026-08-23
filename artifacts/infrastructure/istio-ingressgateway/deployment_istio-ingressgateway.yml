@@ -38,7 +38,9 @@ spec:
         sidecar.istio.io/inject: "true"
     spec:
       containers:
-        - env: null
+        - env:
+            - name: ISTIO_META_ENABLE_HBONE
+              value: "true"
           image: auto
           name: istio-proxy
           ports:

@@ -20,6 +20,40 @@ if [[ "$(homelab version)" != "0.5.0" ]]; then
   exit 1
 fi
 
+if [[ "$(yq -o=json -I=0 '
+  .helmCharts[]
+  | select(.name == "istiod")
+  | .valuesInline.meshConfig.defaultConfig.proxyMetadata.ISTIO_META_ENABLE_HBONE
+' argocd/infrastructure/istiod/kustomization.yaml)" != '"true"' ]]; then
+  printf 'Error: istiod mesh defaults must enable HBONE with string proxy metadata.\n' >&2
+  exit 1
+fi
+if [[ "$(yq -o=json -I=0 '
+  .data.mesh
+  | from_yaml
+  | .defaultConfig.proxyMetadata.ISTIO_META_ENABLE_HBONE
+' artifacts/infrastructure/istiod/configmap_istio.yml)" != '"true"' ]]; then
+  printf 'Error: rendered Istio mesh config must enable HBONE with string proxy metadata.\n' >&2
+  exit 1
+fi
+if [[ "$(yq -o=json -I=0 '
+  .spec.template.spec.containers[]
+  | select(.name == "istio-proxy")
+  | .env[]
+  | select(.name == "ISTIO_META_ENABLE_HBONE")
+  | .value
+' artifacts/infrastructure/istio-ingressgateway/deployment_istio-ingressgateway.yml)" != '"true"' ]]; then
+  printf 'Error: rendered ingress gateway must advertise HBONE capability.\n' >&2
+  exit 1
+fi
+if [[ "$(yq -o=json -I=0 '
+  [.spec.ports[] | [.name, .port, .targetPort, .protocol]]
+' artifacts/infrastructure/istio-ingressgateway/service_istio-ingressgateway.yml)" != \
+  '[["status-port",15021,15021,"TCP"],["http2",80,80,"TCP"],["https",443,443,"TCP"],["tls-mqtt",8883,8883,"TCP"]]' ]]; then
+  printf 'Error: rendered ingress gateway Service contract changed.\n' >&2
+  exit 1
+fi
+
 actionlint
 shellcheck -x scripts/*.sh tests/bootstrap/*.sh
 kubeconform \

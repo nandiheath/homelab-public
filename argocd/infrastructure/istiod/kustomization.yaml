@@ -11,6 +11,10 @@ helmCharts:
   namespace: istio-system
   version: 1.24.5  
   valuesInline:
+    meshConfig:
+      defaultConfig:
+        proxyMetadata:
+          ISTIO_META_ENABLE_HBONE: "true"
     pilot:
       env:
         PILOT_ENABLE_AMBIENT: true

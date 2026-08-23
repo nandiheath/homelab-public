@@ -31,3 +31,6 @@ service:
 name: istio-ingressgateway
 labels:
   istio: ingressgateway
+
+env:
+  ISTIO_META_ENABLE_HBONE: "true"
