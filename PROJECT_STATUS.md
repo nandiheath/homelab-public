@@ -1,6 +1,6 @@
 # Project status
 
-_Last observed: 2026-08-22_
+_Last observed: 2026-08-23_
 
 ## Current state
 
@@ -43,6 +43,7 @@ _Last observed: 2026-08-22_
 - HLP-M003 final validation passed with `51` Ansible files at zero failures/warnings and `351` rendered resources (`246` valid, `0` invalid, `0` errors, `105` schema-skipped); private validation and the public/private ownership graph also passed. Final read-only acceptance found all API readiness checks passing, three Ready pinned-version nodes, every expected Application Healthy/Synced, every workload controller converged, exactly three reviewed PVCs Bound, Hubble TLS Ready, both control-plane namespaces outside ambient mode, retained ingress routes healthy, the obsolete Prometheus route absent, and no backup policy or bootstrap-temporary credential manifest. No private topology or credential value is recorded here.
 - HLP-M009 completed on 2026-08-19. Argo CD RBAC now evaluates the Dex `preferred_username` claim alongside `email`, preserves an empty default role, and maps the configured GitHub login to `role:admin` without publishing the private email. Focused rendering, repository validation, and pull-request checks passed; live Argo CD reconciled revision `2304e881932d096afaa46ef20388f3458d4a8cf1` Healthy/Synced with the expected RBAC ConfigMap, and the authenticated administrator confirmed applications are visible after reauthentication.
 - The reusable MQTT ingress-port contract completed on 2026-08-22 via pull request #48. Source and rendered gateway Service preserve ports `15021`, `80`, and `443`, add exactly one `8883`/`tls-mqtt` port, retain the existing LoadBalancer contract, and contain no private hostname, address, broker, credential, or route.
+- HLP-M010 completed on 2026-08-23. Istio base, CNI, control plane, ztunnel, and ingress gateway now use supported 1.30.3; injected proxies explicitly advertise HBONE capability while the reviewed ingress Service contract remains unchanged. Focused rendering and `./scripts/validate.sh` reported 371 resources, 260 valid, 0 invalid, and 0 errors; task lifecycle validation and pull-request checks passed. After authorized reconciliation all five Istio applications were Healthy/Synced, live gateway discovery marked both Homelab Hub endpoints for HBONE, and three consecutive external requests returned the Hub's JSON 401 authentication response instead of an upstream transport reset.
 
 ## Rollup protocol
 
