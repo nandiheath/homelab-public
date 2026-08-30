@@ -1,11 +1,12 @@
 # Project status
 
-_Last observed: 2026-08-23_
+_Last observed: 2026-08-30_
 
 ## Current state
 
 - Public GitOps desired state is discovered recursively below `argocd/`; committed render output mirrors each source-relative path below `artifacts/`. Reusable infrastructure remains public and applications remain private.
 - The repository contains Ansible playbooks for host operations and a Kubernetes bootstrap script. They are operational surfaces, not routine validation.
+- HLP-M011 completed the reusable Raspberry Pi OMP boundary: a checksum-pinned Linux ARM64 role manages separate hardened loopback auth-broker and authenticated private-interface gateway services, fail-closed source-CIDR firewalling, root-managed systemd credential propagation, fixed-GID read-only workload bearer projection, and exactly authorized rotation/revocation operations. Private inventory selects one node without publishing topology or credentials. No host installation, OAuth login, cluster contact, or deployment has occurred.
 - HLP-M003 completed the guarded three-server cluster lifecycle on 2026-08-19; Git history retains the task and milestone handoffs, and no active rebuild contract remains.
 - HLP-M002 remains a future backup/disaster-recovery planning reminder; it carries no implementation claim and is not evidence of deployed backup infrastructure.
 - Planning is milestone-first: every child task references a parent, and milestone completion requires child rollup plus milestone-level verification.
@@ -44,6 +45,7 @@ _Last observed: 2026-08-23_
 - HLP-M009 completed on 2026-08-19. Argo CD RBAC now evaluates the Dex `preferred_username` claim alongside `email`, preserves an empty default role, and maps the configured GitHub login to `role:admin` without publishing the private email. Focused rendering, repository validation, and pull-request checks passed; live Argo CD reconciled revision `2304e881932d096afaa46ef20388f3458d4a8cf1` Healthy/Synced with the expected RBAC ConfigMap, and the authenticated administrator confirmed applications are visible after reauthentication.
 - The reusable MQTT ingress-port contract completed on 2026-08-22 via pull request #48. Source and rendered gateway Service preserve ports `15021`, `80`, and `443`, add exactly one `8883`/`tls-mqtt` port, retain the existing LoadBalancer contract, and contain no private hostname, address, broker, credential, or route.
 - HLP-M010 completed on 2026-08-23. Istio base, CNI, control plane, ztunnel, and ingress gateway now use supported 1.30.3; injected proxies explicitly advertise HBONE capability while the reviewed ingress Service contract remains unchanged. Focused rendering and `./scripts/validate.sh` reported 371 resources, 260 valid, 0 invalid, and 0 errors; task lifecycle validation and pull-request checks passed. After authorized reconciliation all five Istio applications were Healthy/Synced, live gateway discovery marked both Homelab Hub endpoints for HBONE, and three consecutive external requests returned the Hub's JSON 401 authentication response instead of an upstream transport reset.
+- HLP-M011 completed on 2026-08-30 through public pull request #55 and private pull requests #126 and #127. Focused fixtures accepted the reviewed boundary and rejected 19 hostile or weakened contracts; production-profile Ansible validation reported zero failures and warnings across 62 files; lifecycle and entrypoint fixtures passed; repository validation reported 371 resources, 260 valid, 0 invalid, 0 errors, and 111 schema-skipped; private validation, integrated production-inventory syntax, and the public/private repository graph passed offline.
 
 ## Rollup protocol
 
