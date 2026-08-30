@@ -1,0 +1,68 @@
+---
+- name: Verify rendered OMP system contracts
+  hosts: omp_codex
+  gather_facts: false
+  tasks:
+    - name: Load and validate OMP role variables
+      ansible.builtin.include_role:
+        name: omp_codex
+        tasks_from: preflight
+        public: true
+
+    - name: Render OMP unit and firewall templates
+      ansible.builtin.set_fact:
+        omp_fixture_broker_unit: >-
+          {{ lookup('ansible.builtin.template', playbook_dir ~ '/../../ansible/roles/omp_codex/templates/omp-auth-broker.service.j2') }}
+        omp_fixture_gateway_unit: >-
+          {{ lookup('ansible.builtin.template', playbook_dir ~ '/../../ansible/roles/omp_codex/templates/omp-auth-gateway.service.j2') }}
+        omp_fixture_firewall_unit: >-
+          {{ lookup('ansible.builtin.template', playbook_dir ~ '/../../ansible/roles/omp_codex/templates/omp-codex-firewall.service.j2') }}
+        omp_fixture_firewall_rules: >-
+          {{ lookup('ansible.builtin.template', playbook_dir ~ '/../../ansible/roles/omp_codex/templates/omp-codex.nft.j2') }}
+
+    - name: Require exact broker and gateway execution boundary
+      ansible.builtin.assert:
+        that:
+          - >-
+            'ExecStart=' ~ omp_codex_binary_link
+            ~ ' auth-broker serve --bind=127.0.0.1:7788'
+            in omp_fixture_broker_unit
+          - >-
+            'ExecStart=' ~ omp_codex_gateway_wrapper_path ~ ' '
+            ~ omp_codex_binary_link
+            ~ ' auth-gateway serve --bind=192.0.2.10:4000'
+            in omp_fixture_gateway_unit
+          - "'--no-auth' not in omp_fixture_gateway_unit"
+          - "'OMP_AUTH_BROKER_TOKEN=' not in omp_fixture_gateway_unit"
+          - "'EnvironmentFile=' not in omp_fixture_gateway_unit"
+          - "'Environment=OMP_AUTH_BROKER_URL=http://127.0.0.1:7788' in omp_fixture_gateway_unit"
+          - "'LoadCredential=broker-token:/var/lib/omp-broker/.omp/auth-broker.token' in omp_fixture_gateway_unit"
+          - "'Requires=omp-auth-broker.service omp-codex-firewall.service' in omp_fixture_gateway_unit"
+          - "'ReadWritePaths=/var/lib/omp-broker' in omp_fixture_broker_unit"
+          - "'ReadWritePaths=/var/lib/omp-gateway' in omp_fixture_gateway_unit"
+          - "'CapabilityBoundingSet=' in omp_fixture_broker_unit"
+          - "'CapabilityBoundingSet=' in omp_fixture_gateway_unit"
+
+    - name: Require complete hardening in both long-running units
+      ansible.builtin.assert:
+        that:
+          - >-
+            omp_codex_required_hardening
+            | difference(omp_fixture_broker_unit.split('\n'))
+            | length == 0
+          - >-
+            omp_codex_required_hardening
+            | difference(omp_fixture_gateway_unit.split('\n'))
+            | length == 0
+
+    - name: Require fail-closed source-CIDR firewall rendering
+      ansible.builtin.assert:
+        that:
+          - "'delete table inet omp_codex' in omp_fixture_firewall_rules"
+          - "'ip daddr 192.0.2.10 tcp dport 4000 ip saddr { 198.51.100.0/24 } accept' in omp_fixture_firewall_rules"
+          - "'ip daddr 192.0.2.10 tcp dport 4000 counter drop' in omp_fixture_firewall_rules"
+          - "'0.0.0.0/0' not in omp_fixture_firewall_rules"
+          - "'PartOf=nftables.service' in omp_fixture_firewall_unit"
+          - "'ExecStartPre=-/usr/sbin/nft add table inet omp_codex' in omp_fixture_firewall_unit"
+          - "'ExecStart=/usr/sbin/nft --check --file /etc/nftables.d/omp-codex.nft' in omp_fixture_firewall_unit"
+          - "'Before=network.target omp-auth-gateway.service' in omp_fixture_firewall_unit"

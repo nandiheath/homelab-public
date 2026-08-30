@@ -1,0 +1,54 @@
+[Unit]
+Description=Authenticated OMP provider gateway
+Documentation=https://github.com/can1357/oh-my-pi/blob/v{{ omp_codex_version }}/docs/auth-broker-gateway.md
+Requires=omp-auth-broker.service omp-codex-firewall.service
+After=network-online.target omp-auth-broker.service omp-codex-firewall.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{ omp_codex_gateway_user }}
+Group={{ omp_codex_gateway_group }}
+WorkingDirectory={{ omp_codex_gateway_state_dir }}
+Environment=HOME={{ omp_codex_gateway_state_dir }}
+Environment=PI_CONFIG_DIR={{ omp_codex_gateway_config_dir }}
+Environment=OMP_AUTH_BROKER_URL=http://{{ omp_codex_broker_bind_address }}:{{ omp_codex_broker_port }}
+LoadCredential=broker-token:{{ omp_codex_broker_config_dir }}/auth-broker.token
+ExecStart={{ omp_codex_gateway_wrapper_path }} {{ omp_codex_binary_link }} auth-gateway serve --bind={{ omp_codex_gateway_bind_address }}:{{ omp_codex_gateway_port }}
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=30s
+KillSignal=SIGTERM
+TasksMax={{ omp_codex_gateway_tasks_max }}
+MemoryMax={{ omp_codex_gateway_memory_max }}
+CPUQuota=100%
+ReadWritePaths={{ omp_codex_gateway_state_dir }}
+CapabilityBoundingSet=
+AmbientCapabilities=
+DevicePolicy=closed
+KeyringMode=private
+LockPersonality=true
+NoNewPrivileges=true
+PrivateDevices=true
+PrivateMounts=true
+PrivateTmp=true
+ProtectClock=true
+ProtectControlGroups=true
+ProtectHome=true
+ProtectHostname=true
+ProtectKernelLogs=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectProc=invisible
+ProcSubset=pid
+ProtectSystem=strict
+RemoveIPC=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+SystemCallArchitectures=native
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,10 @@
+delete table inet omp_codex
+
+table inet omp_codex {
+  chain input {
+    type filter hook input priority filter; policy accept;
+
+    ip daddr {{ omp_codex_gateway_bind_address }} tcp dport {{ omp_codex_gateway_port }} ip saddr { {{ omp_codex_gateway_allowed_cidrs | join(', ') }} } accept
+    ip daddr {{ omp_codex_gateway_bind_address }} tcp dport {{ omp_codex_gateway_port }} counter drop
+  }
+}

@@ -1,0 +1,352 @@
+---
+- name: Validate OMP Codex boundary inputs
+  ansible.builtin.include_tasks: preflight.yml
+
+- name: Install OMP runtime dependencies
+  ansible.builtin.package:
+    name:
+      - ca-certificates
+      - nftables
+    state: present
+
+- name: Create OMP service groups
+  ansible.builtin.group:
+    name: "{{ item.name }}"
+    gid: "{{ item.gid | default(omit) }}"
+    system: true
+    state: present
+  loop:
+    - name: "{{ omp_codex_broker_group }}"
+    - name: "{{ omp_codex_gateway_group }}"
+    - name: "{{ omp_codex_gateway_client_group }}"
+      gid: "{{ omp_codex_gateway_client_gid }}"
+  loop_control:
+    label: "{{ item.name }}"
+- name: Create isolated OMP service users
+  ansible.builtin.user:
+    name: "{{ item.name }}"
+    group: "{{ item.group }}"
+    home: "{{ item.home }}"
+    create_home: false
+    shell: /usr/sbin/nologin
+    system: true
+    state: present
+  loop:
+    - name: "{{ omp_codex_broker_user }}"
+      group: "{{ omp_codex_broker_group }}"
+      home: "{{ omp_codex_broker_state_dir }}"
+    - name: "{{ omp_codex_gateway_user }}"
+      group: "{{ omp_codex_gateway_group }}"
+      home: "{{ omp_codex_gateway_state_dir }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Create OMP installation and configuration directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - path: "{{ omp_codex_install_dir }}"
+      owner: root
+      group: root
+      mode: "0755"
+    - path: "{{ omp_codex_nftables_dir }}"
+      owner: root
+      group: root
+      mode: "0755"
+    - path: "{{ omp_codex_broker_state_dir }}"
+      owner: "{{ omp_codex_broker_user }}"
+      group: "{{ omp_codex_broker_group }}"
+      mode: "{{ omp_codex_broker_state_mode }}"
+    - path: "{{ omp_codex_broker_config_dir }}"
+      owner: "{{ omp_codex_broker_user }}"
+      group: "{{ omp_codex_broker_group }}"
+      mode: "{{ omp_codex_broker_state_mode }}"
+    - path: "{{ omp_codex_gateway_state_dir }}"
+      owner: "{{ omp_codex_gateway_user }}"
+      group: "{{ omp_codex_gateway_group }}"
+      mode: "{{ omp_codex_gateway_state_mode }}"
+    - path: "{{ omp_codex_gateway_config_dir }}"
+      owner: "{{ omp_codex_gateway_user }}"
+      group: "{{ omp_codex_gateway_group }}"
+      mode: "{{ omp_codex_gateway_state_mode }}"
+    - path: "{{ omp_codex_gateway_client_dir }}"
+      owner: root
+      group: "{{ omp_codex_gateway_client_group }}"
+      mode: "{{ omp_codex_gateway_client_dir_mode }}"
+  loop_control:
+    label: "{{ item.path }}"
+
+- name: Download checksum-pinned OMP Linux ARM64 binary
+  ansible.builtin.get_url:
+    url: "{{ omp_codex_download_url }}"
+    dest: "{{ omp_codex_binary_path }}"
+    owner: root
+    group: root
+    mode: "0755"
+    checksum: "sha256:{{ omp_codex_linux_arm64_sha256 }}"
+  notify:
+    - Restart OMP broker
+    - Restart OMP gateway
+
+- name: Verify downloaded OMP checksum
+  ansible.builtin.stat:
+    path: "{{ omp_codex_binary_path }}"
+    checksum_algorithm: sha256
+  register: omp_codex_binary_stat
+
+- name: Require exact installed OMP checksum
+  ansible.builtin.assert:
+    that:
+      - omp_codex_binary_stat.stat.exists
+      - omp_codex_binary_stat.stat.checksum == omp_codex_supported_linux_arm64_sha256
+      - omp_codex_binary_stat.stat.mode == '0755'
+      - omp_codex_binary_stat.stat.pw_name == 'root'
+      - omp_codex_binary_stat.stat.gr_name == 'root'
+    fail_msg: Installed OMP binary does not match the reviewed root-owned release.
+
+- name: Verify installed OMP version
+  ansible.builtin.command:
+    argv:
+      - "{{ omp_codex_binary_path }}"
+      - --version
+  register: omp_codex_version_output
+  changed_when: false
+
+- name: Require exact installed OMP version
+  ansible.builtin.assert:
+    that:
+      - omp_codex_version_output.stdout | trim == 'omp/' ~ omp_codex_supported_version
+    fail_msg: Installed OMP executable reports an unexpected version.
+
+- name: Link the reviewed OMP executable
+  ansible.builtin.file:
+    src: "{{ omp_codex_binary_path }}"
+    dest: "{{ omp_codex_binary_link }}"
+    state: link
+    owner: root
+    group: root
+    force: true
+  notify:
+    - Restart OMP broker
+    - Restart OMP gateway
+
+- name: Install systemd credential gateway wrapper
+  ansible.builtin.copy:
+    src: omp-auth-gateway-exec
+    dest: "{{ omp_codex_gateway_wrapper_path }}"
+    owner: root
+    group: root
+    mode: "{{ omp_codex_gateway_wrapper_mode }}"
+  notify: Restart OMP gateway
+
+- name: Inspect broker bearer token
+  ansible.builtin.stat:
+    path: "{{ omp_codex_broker_config_dir }}/auth-broker.token"
+  register: omp_codex_broker_token_stat
+  no_log: true
+
+- name: Generate broker bearer token on first install
+  become: true
+  become_user: "{{ omp_codex_broker_user }}"
+  ansible.builtin.command:
+    argv:
+      - "{{ omp_codex_binary_link }}"
+      - auth-broker
+      - token
+  environment:
+    HOME: "{{ omp_codex_broker_state_dir }}"
+    PI_CONFIG_DIR: "{{ omp_codex_broker_config_dir }}"
+  when:
+    - not omp_codex_broker_token_stat.stat.exists
+    - not omp_codex_rotate_broker_token
+  changed_when: true
+  no_log: true
+
+- name: Rotate broker bearer token after exact authorization
+  become: true
+  become_user: "{{ omp_codex_broker_user }}"
+  ansible.builtin.command:
+    argv:
+      - "{{ omp_codex_binary_link }}"
+      - auth-broker
+      - token
+      - --regenerate
+  environment:
+    HOME: "{{ omp_codex_broker_state_dir }}"
+    PI_CONFIG_DIR: "{{ omp_codex_broker_config_dir }}"
+  when: omp_codex_rotate_broker_token
+  changed_when: true
+  no_log: true
+  notify:
+    - Restart OMP broker
+    - Restart OMP gateway
+
+- name: Revoke OpenAI Codex OAuth after exact authorization
+  become: true
+  become_user: "{{ omp_codex_broker_user }}"
+  ansible.builtin.command:
+    argv:
+      - "{{ omp_codex_binary_link }}"
+      - auth-broker
+      - logout
+      - openai-codex
+  environment:
+    HOME: "{{ omp_codex_broker_state_dir }}"
+    PI_CONFIG_DIR: "{{ omp_codex_broker_config_dir }}"
+  when: omp_codex_revoke_openai_codex
+  changed_when: true
+  no_log: true
+  notify:
+    - Restart OMP broker
+    - Restart OMP gateway
+
+- name: Enforce broker bearer-token ownership
+  ansible.builtin.file:
+    path: "{{ omp_codex_broker_config_dir }}/auth-broker.token"
+    state: file
+    owner: "{{ omp_codex_broker_user }}"
+    group: "{{ omp_codex_broker_group }}"
+    mode: "{{ omp_codex_broker_token_mode }}"
+  no_log: true
+
+- name: Read broker token for gateway token bootstrap
+  ansible.builtin.slurp:
+    src: "{{ omp_codex_broker_config_dir }}/auth-broker.token"
+  register: omp_codex_broker_token
+  no_log: true
+
+
+- name: Inspect gateway bearer token
+  ansible.builtin.stat:
+    path: "{{ omp_codex_gateway_config_dir }}/auth-gateway.token"
+  register: omp_codex_gateway_token_stat
+  no_log: true
+
+- name: Generate authenticated gateway bearer token on first install
+  become: true
+  become_user: "{{ omp_codex_gateway_user }}"
+  ansible.builtin.command:
+    argv:
+      - "{{ omp_codex_binary_link }}"
+      - auth-gateway
+      - token
+  environment:
+    HOME: "{{ omp_codex_gateway_state_dir }}"
+    PI_CONFIG_DIR: "{{ omp_codex_gateway_config_dir }}"
+    OMP_AUTH_BROKER_URL: "http://{{ omp_codex_broker_bind_address }}:{{ omp_codex_broker_port }}"
+    OMP_AUTH_BROKER_TOKEN: "{{ omp_codex_broker_token.content | b64decode | trim }}"
+  when:
+    - not omp_codex_gateway_token_stat.stat.exists
+    - not omp_codex_rotate_gateway_token
+  changed_when: true
+  no_log: true
+
+- name: Rotate gateway bearer token after exact authorization
+  become: true
+  become_user: "{{ omp_codex_gateway_user }}"
+  ansible.builtin.command:
+    argv:
+      - "{{ omp_codex_binary_link }}"
+      - auth-gateway
+      - token
+      - --regenerate
+  environment:
+    HOME: "{{ omp_codex_gateway_state_dir }}"
+    PI_CONFIG_DIR: "{{ omp_codex_gateway_config_dir }}"
+    OMP_AUTH_BROKER_URL: "http://{{ omp_codex_broker_bind_address }}:{{ omp_codex_broker_port }}"
+    OMP_AUTH_BROKER_TOKEN: "{{ omp_codex_broker_token.content | b64decode | trim }}"
+  when: omp_codex_rotate_gateway_token
+  changed_when: true
+  no_log: true
+  notify: Restart OMP gateway
+
+- name: Enforce gateway bearer-token ownership
+  ansible.builtin.file:
+    path: "{{ omp_codex_gateway_config_dir }}/auth-gateway.token"
+    state: file
+    owner: "{{ omp_codex_gateway_user }}"
+    group: "{{ omp_codex_gateway_group }}"
+    mode: "{{ omp_codex_gateway_token_mode }}"
+  no_log: true
+
+- name: Read gateway bearer for the exact workload projection
+  ansible.builtin.slurp:
+    src: "{{ omp_codex_gateway_config_dir }}/auth-gateway.token"
+  register: omp_codex_gateway_token
+  no_log: true
+
+- name: Project gateway bearer into the dedicated workload file
+  ansible.builtin.copy:
+    dest: "{{ omp_codex_gateway_client_token_file }}"
+    owner: root
+    group: "{{ omp_codex_gateway_client_group }}"
+    mode: "{{ omp_codex_gateway_client_token_mode }}"
+    content: "{{ omp_codex_gateway_token.content | b64decode | trim }}\n"
+  no_log: true
+
+- name: Install OMP broker systemd unit
+  ansible.builtin.template:
+    src: omp-auth-broker.service.j2
+    dest: /etc/systemd/system/omp-auth-broker.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload systemd units
+    - Restart OMP broker
+
+- name: Install OMP gateway firewall rules
+  ansible.builtin.template:
+    src: omp-codex.nft.j2
+    dest: "{{ omp_codex_nftables_dir }}/omp-codex.nft"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart OMP firewall
+
+- name: Install OMP gateway firewall systemd unit
+  ansible.builtin.template:
+    src: omp-codex-firewall.service.j2
+    dest: /etc/systemd/system/omp-codex-firewall.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload systemd units
+    - Restart OMP firewall
+
+- name: Install authenticated OMP gateway systemd unit
+  ansible.builtin.template:
+    src: omp-auth-gateway.service.j2
+    dest: /etc/systemd/system/omp-auth-gateway.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload systemd units
+    - Restart OMP gateway
+
+- name: Apply changed OMP units before enablement
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable and start OMP broker
+  ansible.builtin.systemd_service:
+    name: omp-auth-broker.service
+    enabled: true
+    state: started
+
+- name: Enable and start OMP gateway firewall
+  ansible.builtin.systemd_service:
+    name: omp-codex-firewall.service
+    enabled: true
+    state: started
+
+- name: Enable and start authenticated OMP gateway
+  ansible.builtin.systemd_service:
+    name: omp-auth-gateway.service
+    enabled: true
+    state: started

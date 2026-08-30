@@ -1,0 +1,9 @@
+---
+- name: Install guarded OMP Codex boundary
+  hosts: omp_codex
+  become: true
+  gather_facts: true
+  serial: 1
+  any_errors_fatal: true
+  roles:
+    - role: omp_codex

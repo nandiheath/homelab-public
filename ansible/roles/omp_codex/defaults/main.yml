@@ -1,0 +1,47 @@
+---
+omp_codex_version: "18.0.10"
+omp_codex_linux_arm64_sha256: 6e83691a8e88fa7eb365231c4424a58dda7db9cc088bf37fadfe98c27b090b79
+omp_codex_download_url: "https://github.com/can1357/oh-my-pi/releases/download/v{{ omp_codex_version }}/omp-linux-arm64"
+omp_codex_install_dir: /usr/local/lib/omp-codex
+omp_codex_binary_path: "{{ omp_codex_install_dir }}/omp-{{ omp_codex_version }}-linux-arm64"
+omp_codex_binary_link: /usr/local/bin/omp
+
+omp_codex_broker_user: omp-broker
+omp_codex_broker_group: omp-broker
+omp_codex_broker_state_dir: /var/lib/omp-broker
+omp_codex_broker_config_dir: "{{ omp_codex_broker_state_dir }}/.omp"
+omp_codex_broker_bind_address: 127.0.0.1
+omp_codex_broker_port: 7788
+omp_codex_broker_state_mode: "0700"
+omp_codex_broker_token_mode: "0600"
+omp_codex_broker_memory_max: 512M
+omp_codex_broker_tasks_max: 128
+
+omp_codex_gateway_user: omp-gateway
+omp_codex_gateway_group: omp-gateway
+omp_codex_gateway_state_dir: /var/lib/omp-gateway
+omp_codex_gateway_config_dir: "{{ omp_codex_gateway_state_dir }}/.omp"
+omp_codex_gateway_bind_address: ""
+omp_codex_gateway_port: 4000
+omp_codex_gateway_allowed_cidrs: []
+omp_codex_gateway_auth_required: true
+omp_codex_gateway_state_mode: "0700"
+omp_codex_gateway_token_mode: "0600"
+omp_codex_gateway_memory_max: 512M
+omp_codex_gateway_tasks_max: 128
+
+omp_codex_gateway_client_group: omp-codex-client
+omp_codex_gateway_client_gid: 24040
+omp_codex_gateway_client_dir: /var/lib/omp-gateway-client
+omp_codex_gateway_client_token_file: "{{ omp_codex_gateway_client_dir }}/auth-gateway.token"
+omp_codex_gateway_client_dir_mode: "0750"
+omp_codex_gateway_client_token_mode: "0640"
+
+omp_codex_gateway_wrapper_path: "{{ omp_codex_install_dir }}/omp-auth-gateway-exec"
+omp_codex_gateway_wrapper_mode: "0755"
+omp_codex_nftables_dir: /etc/nftables.d
+
+omp_codex_rotate_broker_token: false
+omp_codex_rotate_gateway_token: false
+omp_codex_revoke_openai_codex: false
+omp_codex_mutation_authorization: ""

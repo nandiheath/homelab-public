@@ -1,0 +1,9 @@
+---
+- name: Validate OMP boundary fixture inputs
+  hosts: omp_codex
+  gather_facts: false
+  tasks:
+    - name: Run OMP preflight validation only
+      ansible.builtin.include_role:
+        name: omp_codex
+        tasks_from: preflight

@@ -1,0 +1,14 @@
+---
+all:
+  children:
+    omp_codex:
+      hosts:
+        fixture-omp-node:
+          ansible_connection: local
+          ansible_system: Linux
+          ansible_architecture: aarch64
+          ansible_all_ipv4_addresses:
+            - 192.0.2.10
+          omp_codex_gateway_bind_address: 192.0.2.10
+          omp_codex_gateway_allowed_cidrs:
+            - 198.51.100.0/24
