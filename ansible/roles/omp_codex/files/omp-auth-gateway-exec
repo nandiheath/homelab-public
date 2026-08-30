@@ -1,0 +1,25 @@
+#!/bin/sh
+set -eu
+
+: "${CREDENTIALS_DIRECTORY:?systemd credential directory is required}"
+
+if [ "$#" -eq 0 ]; then
+  printf '%s\n' 'gateway command is required' >&2
+  exit 1
+fi
+
+broker_token_file="${CREDENTIALS_DIRECTORY}/broker-token"
+if [ ! -r "$broker_token_file" ]; then
+  printf '%s\n' 'broker credential is unreadable' >&2
+  exit 1
+fi
+
+OMP_AUTH_BROKER_TOKEN=''
+IFS= read -r OMP_AUTH_BROKER_TOKEN < "$broker_token_file" || [ -n "$OMP_AUTH_BROKER_TOKEN" ]
+if [ -z "$OMP_AUTH_BROKER_TOKEN" ]; then
+  printf '%s\n' 'broker credential is empty' >&2
+  exit 1
+fi
+export OMP_AUTH_BROKER_TOKEN
+
+exec "$@"

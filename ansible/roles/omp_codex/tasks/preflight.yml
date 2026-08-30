@@ -1,0 +1,103 @@
+---
+- name: Validate pinned OMP release and host architecture
+  ansible.builtin.assert:
+    that:
+      - ansible_system == 'Linux'
+      - ansible_architecture == 'aarch64'
+      - omp_codex_version == omp_codex_supported_version
+      - omp_codex_linux_arm64_sha256 == omp_codex_supported_linux_arm64_sha256
+      - omp_codex_linux_arm64_sha256 is match('^[0-9a-f]{64}$')
+      - >-
+        omp_codex_download_url
+        == 'https://github.com/can1357/oh-my-pi/releases/download/v'
+           ~ omp_codex_supported_version ~ '/omp-linux-arm64'
+    fail_msg: OMP requires the reviewed Linux ARM64 release URL, version, and SHA-256 pin.
+
+- name: Validate isolated service identities and state modes
+  ansible.builtin.assert:
+    that:
+      - omp_codex_broker_user == 'omp-broker'
+      - omp_codex_broker_group == 'omp-broker'
+      - omp_codex_gateway_user == 'omp-gateway'
+      - omp_codex_gateway_group == 'omp-gateway'
+      - omp_codex_broker_user != omp_codex_gateway_user
+      - omp_codex_gateway_client_group == 'omp-codex-client'
+      - omp_codex_gateway_client_gid | int == 24040
+      - omp_codex_broker_state_mode == '0700'
+      - omp_codex_gateway_state_mode == '0700'
+      - omp_codex_broker_token_mode == '0600'
+      - omp_codex_gateway_token_mode == '0600'
+      - omp_codex_gateway_wrapper_mode == '0755'
+      - omp_codex_gateway_client_dir_mode == '0750'
+      - omp_codex_gateway_client_token_mode == '0640'
+      - omp_codex_broker_memory_max == '512M'
+      - omp_codex_gateway_memory_max == '512M'
+      - omp_codex_broker_tasks_max | int == 128
+      - omp_codex_gateway_tasks_max | int == 128
+    fail_msg: OMP service identities, state modes, token modes, or resource ceilings were weakened.
+
+- name: Validate broker and authenticated gateway listeners
+  ansible.builtin.assert:
+    that:
+      - omp_codex_broker_bind_address == '127.0.0.1'
+      - omp_codex_broker_port | int == 7788
+      - omp_codex_gateway_bind_address is match('^[0-9]{1,3}(\.[0-9]{1,3}){3}$')
+      - omp_codex_gateway_bind_address not in ['0.0.0.0', '127.0.0.1']
+      - ansible_all_ipv4_addresses is defined
+      - omp_codex_gateway_bind_address in ansible_all_ipv4_addresses
+      - omp_codex_gateway_port | int == 4000
+      - omp_codex_gateway_port | int != omp_codex_broker_port | int
+      - omp_codex_gateway_auth_required is sameas true
+      - omp_codex_gateway_allowed_cidrs | length > 0
+      - omp_codex_gateway_allowed_cidrs | length <= 8
+      - >-
+        omp_codex_gateway_allowed_cidrs
+        | select('match', '^[0-9]{1,3}(\.[0-9]{1,3}){3}/([1-9]|[12][0-9]|3[0-2])$')
+        | list | length
+        == omp_codex_gateway_allowed_cidrs | length
+      - "'0.0.0.0/0' not in omp_codex_gateway_allowed_cidrs"
+      - "'::/0' not in omp_codex_gateway_allowed_cidrs"
+    fail_msg: OMP listener, bearer-authentication, or ingress-CIDR policy is incomplete or broad.
+
+- name: Reject obsolete OMP bypass variables
+  ansible.builtin.assert:
+    that:
+      - omp_codex_gateway_no_auth is not defined
+      - omp_codex_disable_auth is not defined
+      - omp_codex_allow_unbounded is not defined
+      - omp_codex_broker_public is not defined
+    fail_msg: Obsolete unauthenticated, public-broker, or unbounded OMP settings are prohibited.
+
+- name: Guard OMP credential mutations with exact authorization
+  vars:
+    omp_codex_requested_mutations: >-
+      {{
+        [
+          omp_codex_rotate_broker_token,
+          omp_codex_rotate_gateway_token,
+          omp_codex_revoke_openai_codex
+        ]
+        | select('equalto', true)
+        | list
+        | length
+      }}
+  ansible.builtin.assert:
+    that:
+      - omp_codex_rotate_broker_token is boolean
+      - omp_codex_rotate_gateway_token is boolean
+      - omp_codex_revoke_openai_codex is boolean
+      - omp_codex_mutation_authorization is string
+      - omp_codex_requested_mutations | int <= 1
+      - >-
+        (omp_codex_requested_mutations | int == 0
+         and omp_codex_mutation_authorization == '')
+        or
+        (omp_codex_rotate_broker_token
+         and omp_codex_mutation_authorization == 'ROTATE OMP BROKER TOKEN')
+        or
+        (omp_codex_rotate_gateway_token
+         and omp_codex_mutation_authorization == 'ROTATE OMP GATEWAY TOKEN')
+        or
+        (omp_codex_revoke_openai_codex
+         and omp_codex_mutation_authorization == 'REVOKE OPENAI CODEX OAUTH')
+    fail_msg: OMP credential mutation requires one exact operation and its exact authorization phrase.

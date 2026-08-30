@@ -1,0 +1,23 @@
+---
+omp_codex_supported_version: "18.0.10"
+omp_codex_supported_linux_arm64_sha256: 6e83691a8e88fa7eb365231c4424a58dda7db9cc088bf37fadfe98c27b090b79
+omp_codex_required_hardening:
+  - NoNewPrivileges=true
+  - PrivateDevices=true
+  - PrivateTmp=true
+  - ProtectClock=true
+  - ProtectControlGroups=true
+  - ProtectHome=true
+  - ProtectHostname=true
+  - ProtectKernelLogs=true
+  - ProtectKernelModules=true
+  - ProtectKernelTunables=true
+  - ProtectProc=invisible
+  - ProtectSystem=strict
+  - RemoveIPC=true
+  - RestrictNamespaces=true
+  - RestrictRealtime=true
+  - RestrictSUIDSGID=true
+  - LockPersonality=true
+  - SystemCallArchitectures=native
+  - UMask=0077

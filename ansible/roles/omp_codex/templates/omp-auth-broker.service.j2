@@ -1,0 +1,51 @@
+[Unit]
+Description=OMP OAuth credential broker
+Documentation=https://github.com/can1357/oh-my-pi/blob/v{{ omp_codex_version }}/docs/auth-broker-gateway.md
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User={{ omp_codex_broker_user }}
+Group={{ omp_codex_broker_group }}
+WorkingDirectory={{ omp_codex_broker_state_dir }}
+Environment=HOME={{ omp_codex_broker_state_dir }}
+Environment=PI_CONFIG_DIR={{ omp_codex_broker_config_dir }}
+ExecStart={{ omp_codex_binary_link }} auth-broker serve --bind={{ omp_codex_broker_bind_address }}:{{ omp_codex_broker_port }}
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=30s
+KillSignal=SIGTERM
+TasksMax={{ omp_codex_broker_tasks_max }}
+MemoryMax={{ omp_codex_broker_memory_max }}
+CPUQuota=100%
+ReadWritePaths={{ omp_codex_broker_state_dir }}
+CapabilityBoundingSet=
+AmbientCapabilities=
+DevicePolicy=closed
+KeyringMode=private
+LockPersonality=true
+NoNewPrivileges=true
+PrivateDevices=true
+PrivateMounts=true
+PrivateTmp=true
+ProtectClock=true
+ProtectControlGroups=true
+ProtectHome=true
+ProtectHostname=true
+ProtectKernelLogs=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectProc=invisible
+ProcSubset=pid
+ProtectSystem=strict
+RemoveIPC=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+SystemCallArchitectures=native
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

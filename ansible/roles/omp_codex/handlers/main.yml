@@ -1,0 +1,19 @@
+---
+- name: Reload systemd units
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+
+- name: Restart OMP broker
+  ansible.builtin.systemd_service:
+    name: omp-auth-broker.service
+    state: restarted
+
+- name: Restart OMP firewall
+  ansible.builtin.systemd_service:
+    name: omp-codex-firewall.service
+    state: restarted
+
+- name: Restart OMP gateway
+  ansible.builtin.systemd_service:
+    name: omp-auth-gateway.service
+    state: restarted

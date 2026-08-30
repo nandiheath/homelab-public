@@ -1,0 +1,40 @@
+[Unit]
+Description=OMP gateway source-CIDR firewall
+Wants=network-pre.target
+PartOf=nftables.service
+After=nftables.service
+Before=network.target omp-auth-gateway.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+ExecStartPre=-/usr/sbin/nft add table inet omp_codex
+ExecStart=/usr/sbin/nft --check --file {{ omp_codex_nftables_dir }}/omp-codex.nft
+ExecStart=/usr/sbin/nft --file {{ omp_codex_nftables_dir }}/omp-codex.nft
+ExecReload=/usr/sbin/nft --check --file {{ omp_codex_nftables_dir }}/omp-codex.nft
+ExecReload=/usr/sbin/nft --file {{ omp_codex_nftables_dir }}/omp-codex.nft
+CapabilityBoundingSet=CAP_NET_ADMIN
+AmbientCapabilities=
+DevicePolicy=closed
+LockPersonality=true
+NoNewPrivileges=true
+PrivateDevices=true
+PrivateTmp=true
+ProtectClock=true
+ProtectControlGroups=true
+ProtectHome=true
+ProtectHostname=true
+ProtectKernelLogs=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectSystem=strict
+RemoveIPC=true
+RestrictAddressFamilies=AF_NETLINK
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+SystemCallArchitectures=native
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
