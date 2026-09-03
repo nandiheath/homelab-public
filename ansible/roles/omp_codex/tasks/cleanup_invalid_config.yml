@@ -1,0 +1,9 @@
+---
+- name: Remove OMP config trees created by invalid absolute PI_CONFIG_DIR
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop: "{{ omp_codex_invalid_absolute_config_dirs }}"
+  loop_control:
+    label: "{{ item }}"
+  no_log: true

@@ -11,7 +11,7 @@ User={{ omp_codex_gateway_user }}
 Group={{ omp_codex_gateway_group }}
 WorkingDirectory={{ omp_codex_gateway_state_dir }}
 Environment=HOME={{ omp_codex_gateway_state_dir }}
-Environment=PI_CONFIG_DIR={{ omp_codex_gateway_config_dir }}
+Environment=PI_CONFIG_DIR={{ omp_codex_process_config_dir }}
 Environment=OMP_AUTH_BROKER_URL=http://{{ omp_codex_broker_bind_address }}:{{ omp_codex_broker_port }}
 LoadCredential=broker-token:{{ omp_codex_broker_config_dir }}/auth-broker.token
 ExecStart={{ omp_codex_gateway_wrapper_path }} {{ omp_codex_binary_link }} auth-gateway serve --bind={{ omp_codex_gateway_bind_address }}:{{ omp_codex_gateway_port }}

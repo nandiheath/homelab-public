@@ -80,6 +80,9 @@
   loop_control:
     label: "{{ item.path }}"
 
+- name: Remove config trees created by invalid absolute OMP config resolution
+  ansible.builtin.include_tasks: cleanup_invalid_config.yml
+
 - name: Download checksum-pinned OMP Linux ARM64 binary
   ansible.builtin.get_url:
     url: "{{ omp_codex_download_url }}"
@@ -159,7 +162,7 @@
       - token
   environment:
     HOME: "{{ omp_codex_broker_state_dir }}"
-    PI_CONFIG_DIR: "{{ omp_codex_broker_config_dir }}"
+    PI_CONFIG_DIR: "{{ omp_codex_process_config_dir }}"
   when:
     - not omp_codex_broker_token_stat.stat.exists
     - not omp_codex_rotate_broker_token
@@ -177,7 +180,7 @@
       - --regenerate
   environment:
     HOME: "{{ omp_codex_broker_state_dir }}"
-    PI_CONFIG_DIR: "{{ omp_codex_broker_config_dir }}"
+    PI_CONFIG_DIR: "{{ omp_codex_process_config_dir }}"
   when: omp_codex_rotate_broker_token
   changed_when: true
   no_log: true
@@ -196,7 +199,7 @@
       - openai-codex
   environment:
     HOME: "{{ omp_codex_broker_state_dir }}"
-    PI_CONFIG_DIR: "{{ omp_codex_broker_config_dir }}"
+    PI_CONFIG_DIR: "{{ omp_codex_process_config_dir }}"
   when: omp_codex_revoke_openai_codex
   changed_when: true
   no_log: true
@@ -236,7 +239,7 @@
       - token
   environment:
     HOME: "{{ omp_codex_gateway_state_dir }}"
-    PI_CONFIG_DIR: "{{ omp_codex_gateway_config_dir }}"
+    PI_CONFIG_DIR: "{{ omp_codex_process_config_dir }}"
     OMP_AUTH_BROKER_URL: "http://{{ omp_codex_broker_bind_address }}:{{ omp_codex_broker_port }}"
     OMP_AUTH_BROKER_TOKEN: "{{ omp_codex_broker_token.content | b64decode | trim }}"
   when:
@@ -256,7 +259,7 @@
       - --regenerate
   environment:
     HOME: "{{ omp_codex_gateway_state_dir }}"
-    PI_CONFIG_DIR: "{{ omp_codex_gateway_config_dir }}"
+    PI_CONFIG_DIR: "{{ omp_codex_process_config_dir }}"
     OMP_AUTH_BROKER_URL: "http://{{ omp_codex_broker_bind_address }}:{{ omp_codex_broker_port }}"
     OMP_AUTH_BROKER_TOKEN: "{{ omp_codex_broker_token.content | b64decode | trim }}"
   when: omp_codex_rotate_gateway_token

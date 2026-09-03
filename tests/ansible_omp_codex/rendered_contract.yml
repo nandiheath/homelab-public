@@ -32,6 +32,10 @@
             ~ omp_codex_binary_link
             ~ ' auth-gateway serve --bind=192.0.2.10:4000'
             in omp_fixture_gateway_unit
+          - "'Environment=PI_CONFIG_DIR=.omp' in omp_fixture_broker_unit"
+          - "'Environment=PI_CONFIG_DIR=.omp' in omp_fixture_gateway_unit"
+          - "'Environment=PI_CONFIG_DIR=/var/lib/' not in omp_fixture_broker_unit"
+          - "'Environment=PI_CONFIG_DIR=/var/lib/' not in omp_fixture_gateway_unit"
           - "'--no-auth' not in omp_fixture_gateway_unit"
           - "'OMP_AUTH_BROKER_TOKEN=' not in omp_fixture_gateway_unit"
           - "'EnvironmentFile=' not in omp_fixture_gateway_unit"
