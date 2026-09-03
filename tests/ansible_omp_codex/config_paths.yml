@@ -1,0 +1,48 @@
+---
+- name: Verify OMP config path cleanup
+  hosts: omp_codex
+  gather_facts: false
+  vars:
+    omp_fixture_root: "{{ lookup('ansible.builtin.env', 'OMP_CONFIG_PATH_FIXTURE_ROOT') }}"
+    omp_fixture_invalid_config_dirs:
+      - "{{ omp_fixture_root }}/broker/var/lib/omp-broker/.omp"
+      - "{{ omp_fixture_root }}/gateway/var/lib/omp-gateway/.omp"
+    omp_codex_invalid_absolute_config_dirs: "{{ omp_fixture_invalid_config_dirs }}"
+  tasks:
+    - name: Require isolated fixture root
+      ansible.builtin.assert:
+        that:
+          - omp_fixture_root | length > 0
+          - omp_fixture_root.startswith('/')
+          - (omp_fixture_root | basename) is match('^omp-config-path\.')
+
+    - name: Create invalid nested config fixtures
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0700"
+      loop: "{{ omp_fixture_invalid_config_dirs }}"
+
+    - name: Add credential-shaped fixture files
+      ansible.builtin.copy:
+        dest: "{{ item }}/auth-broker.token"
+        content: fixture-token
+        mode: "0600"
+      loop: "{{ omp_fixture_invalid_config_dirs }}"
+      no_log: true
+
+    - name: Exercise role cleanup
+      ansible.builtin.include_role:
+        name: omp_codex
+        tasks_from: cleanup_invalid_config
+
+    - name: Inspect invalid nested config fixtures
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop: "{{ omp_fixture_invalid_config_dirs }}"
+      register: omp_fixture_invalid_config_stats
+
+    - name: Require invalid nested config fixtures removed
+      ansible.builtin.assert:
+        that:
+          - omp_fixture_invalid_config_stats.results | map(attribute='stat.exists') | select('equalto', true) | list | length == 0

@@ -6,6 +6,8 @@ omp_codex_install_dir: /usr/local/lib/omp-codex
 omp_codex_binary_path: "{{ omp_codex_install_dir }}/omp-{{ omp_codex_version }}-linux-arm64"
 omp_codex_binary_link: /usr/local/bin/omp
 
+omp_codex_process_config_dir: .omp
+
 omp_codex_broker_user: omp-broker
 omp_codex_broker_group: omp-broker
 omp_codex_broker_state_dir: /var/lib/omp-broker
@@ -21,6 +23,9 @@ omp_codex_gateway_user: omp-gateway
 omp_codex_gateway_group: omp-gateway
 omp_codex_gateway_state_dir: /var/lib/omp-gateway
 omp_codex_gateway_config_dir: "{{ omp_codex_gateway_state_dir }}/.omp"
+omp_codex_invalid_absolute_config_dirs:
+  - "{{ omp_codex_broker_state_dir }}{{ omp_codex_broker_config_dir }}"
+  - "{{ omp_codex_gateway_state_dir }}{{ omp_codex_gateway_config_dir }}"
 omp_codex_gateway_bind_address: ""
 omp_codex_gateway_port: 4000
 omp_codex_gateway_allowed_cidrs: []

@@ -10,7 +10,7 @@ User={{ omp_codex_broker_user }}
 Group={{ omp_codex_broker_group }}
 WorkingDirectory={{ omp_codex_broker_state_dir }}
 Environment=HOME={{ omp_codex_broker_state_dir }}
-Environment=PI_CONFIG_DIR={{ omp_codex_broker_config_dir }}
+Environment=PI_CONFIG_DIR={{ omp_codex_process_config_dir }}
 ExecStart={{ omp_codex_binary_link }} auth-broker serve --bind={{ omp_codex_broker_bind_address }}:{{ omp_codex_broker_port }}
 Restart=on-failure
 RestartSec=5s

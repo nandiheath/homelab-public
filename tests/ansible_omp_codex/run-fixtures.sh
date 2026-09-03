@@ -11,9 +11,10 @@ preflight="$repo_root/tests/ansible_omp_codex/preflight.yml"
 rendered_contract="$repo_root/tests/ansible_omp_codex/rendered_contract.yml"
 gateway_wrapper="$repo_root/ansible/roles/omp_codex/files/omp-auth-gateway-exec"
 credential_fixture="$(mktemp -d)"
+config_path_fixture="$(mktemp -d "${TMPDIR:-/tmp}/omp-config-path.XXXXXX")"
 
 cleanup() {
-  rm -rf "$credential_fixture"
+  rm -rf "$credential_fixture" "$config_path_fixture"
 }
 trap cleanup EXIT
 
@@ -33,6 +34,9 @@ ansible-playbook -i "$inventory" "$preflight" --extra-vars \
   '{"omp_codex_rotate_gateway_token":true,"omp_codex_mutation_authorization":"ROTATE OMP GATEWAY TOKEN"}' >/dev/null
 printf '%s\n' 'Accepted exactly authorized gateway-token rotation'
 ansible-playbook -i "$inventory" "$rendered_contract" >/dev/null
+OMP_CONFIG_PATH_FIXTURE_ROOT="$config_path_fixture" \
+  ansible-playbook -i "$inventory" "$repo_root/tests/ansible_omp_codex/config_paths.yml" >/dev/null
+printf '%s\n' 'Removed invalid absolute config-path artifacts'
 
 if CREDENTIALS_DIRECTORY="$credential_fixture" "$gateway_wrapper" /usr/bin/true >/dev/null 2>&1; then
   printf '%s\n' 'Expected gateway wrapper to reject a missing broker credential' >&2
@@ -61,6 +65,7 @@ run_rejected 'missing gateway source CIDR' '{"omp_codex_gateway_allowed_cidrs":[
 run_rejected 'world-wide gateway source CIDR' '{"omp_codex_gateway_allowed_cidrs":["0.0.0.0/0"]}'
 run_rejected 'unsafe broker state mode' '{"omp_codex_broker_state_mode":"0755"}'
 run_rejected 'unsafe gateway token mode' '{"omp_codex_gateway_token_mode":"0644"}'
+run_rejected 'absolute OMP process config directory' '{"omp_codex_process_config_dir":"/var/lib/omp-broker/.omp"}'
 run_rejected 'unexpected workload projection GID' '{"omp_codex_gateway_client_gid":24041}'
 run_rejected 'world-readable workload bearer' '{"omp_codex_gateway_client_token_mode":"0644"}'
 run_rejected 'legacy unauthenticated mode' '{"omp_codex_gateway_no_auth":true}'

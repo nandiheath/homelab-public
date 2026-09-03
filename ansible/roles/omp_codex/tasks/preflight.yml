@@ -16,6 +16,15 @@
 - name: Validate isolated service identities and state modes
   ansible.builtin.assert:
     that:
+      - omp_codex_process_config_dir == '.omp'
+      - omp_codex_broker_state_dir == '/var/lib/omp-broker'
+      - omp_codex_broker_config_dir == omp_codex_broker_state_dir ~ '/' ~ omp_codex_process_config_dir
+      - omp_codex_gateway_state_dir == '/var/lib/omp-gateway'
+      - omp_codex_gateway_config_dir == omp_codex_gateway_state_dir ~ '/' ~ omp_codex_process_config_dir
+      - omp_codex_invalid_absolute_config_dirs == [
+          omp_codex_broker_state_dir ~ omp_codex_broker_config_dir,
+          omp_codex_gateway_state_dir ~ omp_codex_gateway_config_dir
+        ]
       - omp_codex_broker_user == 'omp-broker'
       - omp_codex_broker_group == 'omp-broker'
       - omp_codex_gateway_user == 'omp-gateway'
